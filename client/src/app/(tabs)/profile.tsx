@@ -77,8 +77,7 @@ export default function Profile() {
     const clerk = useClerk();
     const { isLoaded, isSignedIn, user } = useUser();
 
-    const [isSigningOut, setIsSigningOut] =
-        useState(false);
+    const [isSigningOut, setIsSigningOut] = useState(false);
 
     const fullName = useMemo(() => {
         if (!user) {
@@ -95,8 +94,7 @@ export default function Profile() {
         );
     }, [user]);
 
-    const email =
-        user?.primaryEmailAddress?.emailAddress ?? "";
+    const email = user?.primaryEmailAddress?.emailAddress ?? "";
 
     const initials = useMemo(() => {
         if (!user) {
@@ -106,8 +104,7 @@ export default function Profile() {
         const first = user.firstName?.[0] ?? "";
         const last = user.lastName?.[0] ?? "";
 
-        const result =
-            `${first}${last}`.toUpperCase();
+        const result = `${first}${last}`.toUpperCase();
 
         if (result) {
             return result;
@@ -159,10 +156,7 @@ export default function Profile() {
                         try {
                             await clerk.signOut();
                         } catch (error) {
-                            console.error(
-                                "Sign out failed:",
-                                error
-                            );
+                            console.error("Sign out failed:", error);
 
                             Alert.alert(
                                 "Sign Out Failed",
@@ -179,41 +173,27 @@ export default function Profile() {
 
     if (!isLoaded) {
         return (
-            <SafeAreaView
-                style={styles.safeArea}
-                edges={["top"]}
-            >
+            <SafeAreaView style={styles.safeArea} edges={["top"]}>
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator
-                        size="small"
-                        color={COLORS.black}
-                    />
+                    <ActivityIndicator size="small" color={COLORS.black} />
                 </View>
             </SafeAreaView>
         );
     }
 
     return (
-        <SafeAreaView
-            style={styles.safeArea}
-            edges={["top"]}
-        >
+        <SafeAreaView style={styles.safeArea} edges={["top"]}>
             <View style={styles.screen}>
                 {/* =====================================================
                     HEADER
                 ====================================================== */}
-
                 <View style={styles.header}>
-                    <Text style={styles.headerTitle}>
-                        Profile
-                    </Text>
+                    <Text style={styles.headerTitle}>Profile</Text>
                 </View>
 
                 <ScrollView
                     style={styles.scroll}
-                    contentContainerStyle={
-                        styles.scrollContent
-                    }
+                    contentContainerStyle={styles.scrollContent}
                     showsVerticalScrollIndicator={false}
                     bounces
                 >
@@ -223,17 +203,8 @@ export default function Profile() {
                                 {/* =================================================
                                     GUEST PROFILE
                                 ================================================== */}
-
-                                <View
-                                    style={
-                                        styles.guestHero
-                                    }
-                                >
-                                    <View
-                                        style={
-                                            styles.guestAvatar
-                                        }
-                                    >
+                                <View style={styles.guestHero}>
+                                    <View style={styles.guestAvatar}>
                                         <Ionicons
                                             name="person-outline"
                                             size={44}
@@ -241,46 +212,24 @@ export default function Profile() {
                                         />
                                     </View>
 
-                                    <Text
-                                        style={
-                                            styles.guestTitle
-                                        }
-                                    >
+                                    <Text style={styles.guestTitle}>
                                         Welcome to RenewX
                                     </Text>
 
-                                    <Text
-                                        style={
-                                            styles.guestSubtitle
-                                        }
-                                    >
-                                        Sign in to access your
-                                        account, orders,
+                                    <Text style={styles.guestSubtitle}>
+                                        Sign in to access your account, orders,
                                         favorites and more.
                                     </Text>
 
-                                    <View
-                                        style={
-                                            styles.authButtons
-                                        }
-                                    >
+                                    <View style={styles.authButtons}>
                                         <Pressable
-                                            onPress={() =>
-                                                navigate(
-                                                    "/sign-in"
-                                                )
-                                            }
+                                            onPress={() => navigate("/sign-in")}
                                             style={({ pressed }) => [
                                                 styles.signInButton,
-                                                pressed &&
-                                                    styles.signInPressed,
+                                                pressed && styles.signInPressed,
                                             ]}
                                         >
-                                            <Text
-                                                style={
-                                                    styles.signInButtonText
-                                                }
-                                            >
+                                            <Text style={styles.signInButtonText}>
                                                 Sign In
                                             </Text>
 
@@ -292,22 +241,13 @@ export default function Profile() {
                                         </Pressable>
 
                                         <Pressable
-                                            onPress={() =>
-                                                navigate(
-                                                    "/sign-up"
-                                                )
-                                            }
+                                            onPress={() => navigate("/sign-up")}
                                             style={({ pressed }) => [
                                                 styles.createAccountButton,
-                                                pressed &&
-                                                    styles.createAccountPressed,
+                                                pressed && styles.createAccountPressed,
                                             ]}
                                         >
-                                            <Text
-                                                style={
-                                                    styles.createAccountText
-                                                }
-                                            >
+                                            <Text style={styles.createAccountText}>
                                                 Create Account
                                             </Text>
                                         </Pressable>
@@ -317,29 +257,16 @@ export default function Profile() {
                                 {/* =================================================
                                     EXPLORE
                                 ================================================== */}
-
-                                <Text
-                                    style={
-                                        styles.sectionLabel
-                                    }
-                                >
+                                <Text style={styles.sectionLabel}>
                                     EXPLORE RENEWX
                                 </Text>
 
-                                <View
-                                    style={
-                                        styles.menuCard
-                                    }
-                                >
+                                <View style={styles.menuCard}>
                                     <ProfileMenuRow
                                         title="Favorites"
                                         subtitle="View your saved products"
                                         icon="heart-outline"
-                                        onPress={() =>
-                                            navigate(
-                                                "/favorites"
-                                            )
-                                        }
+                                        onPress={() => navigate("/favorites")}
                                     />
                                 </View>
                             </>
@@ -348,41 +275,22 @@ export default function Profile() {
                                 {/* =================================================
                                     PROFILE HERO
                                 ================================================== */}
-
-                                <View
-                                    style={
-                                        styles.profileHero
-                                    }
-                                >
+                                <View style={styles.profileHero}>
                                     {user?.imageUrl ? (
                                         <Image
-                                            source={{
-                                                uri: user.imageUrl,
-                                            }}
-                                            style={
-                                                styles.profileImage
-                                            }
+                                            source={{ uri: user.imageUrl }}
+                                            style={styles.profileImage}
                                         />
                                     ) : (
-                                        <View
-                                            style={
-                                                styles.profileAvatar
-                                            }
-                                        >
-                                            <Text
-                                                style={
-                                                    styles.initials
-                                                }
-                                            >
+                                        <View style={styles.profileAvatar}>
+                                            <Text style={styles.initials}>
                                                 {initials}
                                             </Text>
                                         </View>
                                     )}
 
                                     <Text
-                                        style={
-                                            styles.userName
-                                        }
+                                        style={styles.userName}
                                         numberOfLines={1}
                                     >
                                         {fullName}
@@ -390,9 +298,7 @@ export default function Profile() {
 
                                     {email ? (
                                         <Text
-                                            style={
-                                                styles.userEmail
-                                            }
+                                            style={styles.userEmail}
                                             numberOfLines={1}
                                         >
                                             {email}
@@ -401,15 +307,10 @@ export default function Profile() {
 
                                     {isAdmin && (
                                         <Pressable
-                                            onPress={() =>
-                                                navigate(
-                                                    "/admin"
-                                                )
-                                            }
+                                            onPress={() => navigate("/admin")}
                                             style={({ pressed }) => [
                                                 styles.adminButton,
-                                                pressed &&
-                                                    styles.buttonPressed,
+                                                pressed && styles.buttonPressed,
                                             ]}
                                         >
                                             <Ionicons
@@ -418,11 +319,7 @@ export default function Profile() {
                                                 color="#FFFFFF"
                                             />
 
-                                            <Text
-                                                style={
-                                                    styles.adminText
-                                                }
-                                            >
+                                            <Text style={styles.adminText}>
                                                 Admin Panel
                                             </Text>
 
@@ -438,61 +335,31 @@ export default function Profile() {
                                 {/* =================================================
                                     ACCOUNT
                                 ================================================== */}
-
-                                <Text
-                                    style={
-                                        styles.sectionLabel
-                                    }
-                                >
+                                <Text style={styles.sectionLabel}>
                                     ACCOUNT
                                 </Text>
 
-                                <View
-                                    style={
-                                        styles.menuCard
-                                    }
-                                >
-                                    {MENU_ITEMS.map(
-                                        (item, index) => (
-                                            <ProfileMenuRow
-                                                key={
-                                                    item.id
-                                                }
-                                                title={
-                                                    item.title
-                                                }
-                                                subtitle={
-                                                    item.subtitle
-                                                }
-                                                icon={
-                                                    item.icon
-                                                }
-                                                onPress={() =>
-                                                    navigate(
-                                                        item.route
-                                                    )
-                                                }
-                                                showDivider={
-                                                    index <
-                                                    MENU_ITEMS.length -
-                                                        1
-                                                }
-                                            />
-                                        )
-                                    )}
+                                <View style={styles.menuCard}>
+                                    {MENU_ITEMS.map((item, index) => (
+                                        <ProfileMenuRow
+                                            key={item.id}
+                                            title={item.title}
+                                            subtitle={item.subtitle}
+                                            icon={item.icon}
+                                            onPress={() => navigate(item.route)}
+                                            showDivider={
+                                                index < MENU_ITEMS.length - 1
+                                            }
+                                        />
+                                    ))}
                                 </View>
 
                                 {/* =================================================
                                     SIGN OUT
                                 ================================================== */}
-
                                 <Pressable
-                                    onPress={
-                                        handleSignOut
-                                    }
-                                    disabled={
-                                        isSigningOut
-                                    }
+                                    onPress={handleSignOut}
+                                    disabled={isSigningOut}
                                     style={({ pressed }) => [
                                         styles.logoutButton,
                                         pressed &&
@@ -503,25 +370,17 @@ export default function Profile() {
                                     {isSigningOut ? (
                                         <ActivityIndicator
                                             size="small"
-                                            color={
-                                                COLORS.danger
-                                            }
+                                            color={COLORS.danger}
                                         />
                                     ) : (
                                         <>
                                             <Ionicons
                                                 name="log-out-outline"
                                                 size={20}
-                                                color={
-                                                    COLORS.danger
-                                                }
+                                                color={COLORS.danger}
                                             />
 
-                                            <Text
-                                                style={
-                                                    styles.logoutText
-                                                }
-                                            >
+                                            <Text style={styles.logoutText}>
                                                 Sign Out
                                             </Text>
                                         </>
@@ -530,11 +389,7 @@ export default function Profile() {
                             </>
                         )}
 
-                        <Text
-                            style={styles.footer}
-                        >
-                            RenewX
-                        </Text>
+                        <Text style={styles.footer}>RenewX</Text>
                     </View>
                 </ScrollView>
             </View>
@@ -542,16 +397,8 @@ export default function Profile() {
     );
 }
 
-
 /* ================================================================
    PROFILE MENU ROW
-
-   IMPORTANT:
-   The entire item is one horizontal flex row:
-   
-   [ ICON ] [ TEXT ---------------- ] [ > ]
-
-   This prevents the icon/text/chevron collision you were seeing.
 ================================================================ */
 
 function ProfileMenuRow({
@@ -572,44 +419,29 @@ function ProfileMenuRow({
             onPress={onPress}
             style={({ pressed }) => [
                 styles.menuRow,
-                showDivider &&
-                    styles.menuRowDivider,
-                pressed &&
-                    styles.menuRowPressed,
+                showDivider && styles.menuRowDivider,
+                pressed && styles.menuRowPressed,
             ]}
         >
             {/* ICON */}
-
             <View style={styles.menuIconWrapper}>
                 <View style={styles.menuIconBox}>
-                    <Ionicons
-                        name={icon}
-                        size={21}
-                        color={COLORS.black}
-                    />
+                    <Ionicons name={icon} size={21} color={COLORS.black} />
                 </View>
             </View>
 
             {/* TEXT */}
-
             <View style={styles.menuTextWrapper}>
-                <Text
-                    style={styles.menuTitle}
-                    numberOfLines={1}
-                >
+                <Text style={styles.menuTitle} numberOfLines={1}>
                     {title}
                 </Text>
 
-                <Text
-                    style={styles.menuSubtitle}
-                    numberOfLines={1}
-                >
+                <Text style={styles.menuSubtitle} numberOfLines={1}>
                     {subtitle}
                 </Text>
             </View>
 
             {/* CHEVRON */}
-
             <View style={styles.menuChevron}>
                 <Ionicons
                     name="chevron-forward"
@@ -620,7 +452,6 @@ function ProfileMenuRow({
         </Pressable>
     );
 }
-
 
 /* ================================================================
    STYLES
@@ -651,8 +482,7 @@ const styles = StyleSheet.create({
     header: {
         height: 58,
         backgroundColor: COLORS.white,
-        borderBottomWidth:
-            StyleSheet.hairlineWidth,
+        borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: COLORS.border,
         alignItems: "center",
         justifyContent: "center",
@@ -825,8 +655,6 @@ const styles = StyleSheet.create({
 
     /* ============================================================
        MENU ROW
-
-       THIS IS THE IMPORTANT FIX.
     ============================================================ */
 
     menuRow: {
@@ -844,8 +672,7 @@ const styles = StyleSheet.create({
     },
 
     menuRowDivider: {
-        borderBottomWidth:
-            StyleSheet.hairlineWidth,
+        borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: COLORS.border,
     },
 
@@ -855,8 +682,6 @@ const styles = StyleSheet.create({
 
     /* ============================================================
        MENU ICON
-
-       Fixed width prevents the text from dropping below it.
     ============================================================ */
 
     menuIconWrapper: {
@@ -874,8 +699,7 @@ const styles = StyleSheet.create({
         height: 46,
         borderRadius: 14,
 
-        backgroundColor:
-            COLORS.iconBackground,
+        backgroundColor: COLORS.iconBackground,
 
         alignItems: "center",
         justifyContent: "center",
@@ -883,8 +707,6 @@ const styles = StyleSheet.create({
 
     /* ============================================================
        MENU TEXT
-
-       flex: 1 means this always stays between icon + chevron.
     ============================================================ */
 
     menuTextWrapper: {
@@ -921,8 +743,6 @@ const styles = StyleSheet.create({
 
     /* ============================================================
        CHEVRON
-
-       Fixed width keeps it on the right side of the row.
     ============================================================ */
 
     menuChevron: {
@@ -953,8 +773,7 @@ const styles = StyleSheet.create({
         height: 94,
         borderRadius: 47,
 
-        backgroundColor:
-            COLORS.iconBackground,
+        backgroundColor: COLORS.iconBackground,
 
         marginBottom: 14,
     },
