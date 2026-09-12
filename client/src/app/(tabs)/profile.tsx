@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -8,262 +8,439 @@ import {
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useClerk, useUser } from "@clerk/expo";
 
-const BLACK = "#111111";
-const TEXT = "#111111";
-const MUTED = "#777777";
-const BORDER = "#E8E8E8";
+const COLORS = {
+  black: "#111111",
+  white: "#FFFFFF",
+  background: "#F7F7F7",
+  text: "#171717",
+  muted: "#777777",
+  border: "#E8E8E8",
+  soft: "#F0F0F2",
+  danger: "#B84E4E",
+};
 
-const ACCOUNT_ACTIONS = [
-  { title: "Orders", subtitle: "Track and manage your orders", icon: "bag-handle-outline" as const, route: "/orders" },
-  { title: "Favorites", subtitle: "View your saved products", icon: "heart-outline" as const, route: "/favorites" },
-  { title: "Shipping Addresses", subtitle: "Manage your delivery addresses", icon: "location-outline" as const, route: "/addresses" },
-  { title: "My Reviews", subtitle: "View your product reviews", icon: "star-outline" as const, route: "/reviews" },
-  { title: "Settings", subtitle: "Manage your account preferences", icon: "settings-outline" as const, route: "/settings" },
+type MenuItem = {
+  id: string;
+  title: string;
+  subtitle: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  route: string;
+};
+
+const MENU_ITEMS: MenuItem[] = [
+  {
+    id: "orders",
+    title: "My Orders",
+    subtitle: "Track and manage your orders",
+    icon: "receipt-outline",
+    route: "/orders",
+  },
+  {
+    id: "favorites",
+    title: "Favorites",
+    subtitle: "Your saved products",
+    icon: "heart-outline",
+    route: "/favorites",
+  },
+  {
+    id: "addresses",
+    title: "Shipping Addresses",
+    subtitle: "Manage your delivery addresses",
+    icon: "location-outline",
+    route: "/addresses",
+  },
+  {
+    id: "reviews",
+    title: "My Reviews",
+    subtitle: "Products you have reviewed",
+    icon: "star-outline",
+    route: "/reviews",
+  },
+  {
+    id: "settings",
+    title: "Settings",
+    subtitle: "Account and app preferences",
+    icon: "settings-outline",
+    route: "/settings",
+  },
 ];
 
 export default function Profile() {
   const router = useRouter();
-  const { width } = useWindowDimensions();
+  const clerk = useClerk();
   const { isLoaded, isSignedIn, user } = useUser();
-  const { signOut } = useClerk();
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
-  const contentWidth = Math.min(Math.max(width - 32, 0), 560);
+  const fullName = useMemo(() => {
+    if (!user) return "Guest User";
+    return (
+      user.fullName ||
+      [user.firstName, user.lastName].filter(Boolean).join(" ") ||
+      user.username ||
+      "RenewX User"
+    );
+  }, [user]);
+
+  const email = user?.primaryEmailAddress?.emailAddress ?? "";
+
+  const initials = useMemo(() => {
+    if (!user) return "G";
+    const result = `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`.toUpperCase();
+    if (result) return result;
+    return fullName
+      .split(" ")
+      .map((part) => part[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
+  }, [user, fullName]);
+
+  const isAdmin = useMemo(() => {
+    const role = user?.publicMetadata?.role;
+    return typeof role === "string" && role.trim().toLowerCase() === "admin";
+  }, [user]);
+
+  const goTo = useCallback(
+    (route: string) => {
+      router.push(route as never);
+    },
+    [router],
+  );
+
+  const handleSignOut = useCallback(() => {
+    if (isSigningOut) return;
+
+    Alert.alert(
+      "Sign Out",
+      "Are you sure you want to sign out of your account?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Sign Out",
+          style: "destructive",
+          onPress: async () => {
+            setIsSigningOut(true);
+            try {
+              await clerk.signOut();
+            } catch (error) {
+              console.error("Sign out failed:", error);
+              Alert.alert("Sign Out Failed", "Please try again.");
+            } finally {
+              setIsSigningOut(false);
+            }
+          },
+        },
+      ],
+    );
+  }, [clerk, isSigningOut]);
 
   if (!isLoaded) {
     return (
       <SafeAreaView style={styles.safeArea} edges={["top"]}>
         <View style={styles.loading}>
-          <ActivityIndicator size="small" color={BLACK} />
+          <ActivityIndicator size="small" color={COLORS.black} />
         </View>
       </SafeAreaView>
     );
   }
 
-  const firstName = user?.firstName?.trim() || "User";
-  const displayName = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "RenewX User";
-  const email = user?.primaryEmailAddress?.emailAddress || "";
-  const isAdmin = user?.publicMetadata?.role === "admin";
-
-  const go = (route: string) => router.push(route as never);
-
-  const handleSignOut = () => {
-    Alert.alert("Sign out", "Are you sure you want to sign out?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Sign Out",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await signOut();
-          } catch (error) {
-            console.error("Sign out error:", error);
-            Alert.alert("Unable to sign out", "Please try again.");
-          }
-        },
-      },
-    ]);
-  };
-
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Profile</Text>
+      <View style={styles.screen}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Profile</Text>
+        </View>
+
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          bounces
+        >
+          <View style={styles.content}>
+            {!isSignedIn ? (
+              <>
+                <View style={styles.guestHero}>
+                  <View style={styles.guestAvatar}>
+                    <Ionicons
+                      name="person-outline"
+                      size={46}
+                      color="#505057"
+                    />
+                  </View>
+
+                  <Text style={styles.guestTitle}>Welcome to RenewX</Text>
+
+                  <Text style={styles.guestSubtitle}>
+                    Sign in to access your account, orders, favorites and more.
+                  </Text>
+
+                  <View style={styles.authButtons}>
+                    <Pressable
+                      onPress={() => goTo("/sign-in")}
+                      style={({ pressed }) => [
+                        styles.signInButton,
+                        pressed && styles.buttonPressed,
+                      ]}
+                    >
+                      <Text style={styles.signInText}>Sign In</Text>
+                      <Ionicons
+                        name="arrow-forward"
+                        size={18}
+                        color={COLORS.white}
+                      />
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() => goTo("/sign-up")}
+                      style={({ pressed }) => [
+                        styles.createButton,
+                        pressed && styles.createButtonPressed,
+                      ]}
+                    >
+                      <Text style={styles.createButtonText}>
+                        Create Account
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+
+                <Text style={styles.sectionLabel}>EXPLORE RENEWX</Text>
+
+                <View style={styles.menuCard}>
+                  <Pressable
+                    onPress={() => goTo("/favorites")}
+                    style={({ pressed }) => [
+                      styles.menuRow,
+                      pressed && styles.rowPressed,
+                    ]}
+                  >
+                    <View style={styles.iconBox}>
+                      <Ionicons
+                        name="heart-outline"
+                        size={21}
+                        color={COLORS.black}
+                      />
+                    </View>
+
+                    <View style={styles.rowText}>
+                      <Text style={styles.rowTitle}>Favorites</Text>
+                      <Text style={styles.rowSubtitle}>
+                        View your saved products
+                      </Text>
+                    </View>
+
+                    <Ionicons
+                      name="chevron-forward"
+                      size={19}
+                      color="#999999"
+                    />
+                  </Pressable>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={styles.profileHero}>
+                  {user?.imageUrl ? (
+                    <Image
+                      source={{ uri: user.imageUrl }}
+                      style={styles.profileImage}
+                    />
+                  ) : (
+                    <View style={styles.profileAvatar}>
+                      <Text style={styles.initials}>{initials}</Text>
+                    </View>
+                  )}
+
+                  <Text style={styles.userName} numberOfLines={1}>
+                    {fullName}
+                  </Text>
+
+                  {email ? (
+                    <Text style={styles.userEmail} numberOfLines={1}>
+                      {email}
+                    </Text>
+                  ) : null}
+
+                  {isAdmin ? (
+                    <Pressable
+                      onPress={() => goTo("/admin")}
+                      style={({ pressed }) => [
+                        styles.adminButton,
+                        pressed && styles.buttonPressed,
+                      ]}
+                    >
+                      <Ionicons
+                        name="shield-checkmark-outline"
+                        size={17}
+                        color={COLORS.white}
+                      />
+                      <Text style={styles.adminText}>Admin Panel</Text>
+                      <Ionicons
+                        name="arrow-forward"
+                        size={14}
+                        color={COLORS.white}
+                      />
+                    </Pressable>
+                  ) : null}
+                </View>
+
+                <Text style={styles.sectionLabel}>ACCOUNT</Text>
+
+                <View style={styles.menuCard}>
+                  {MENU_ITEMS.map((item, index) => (
+                    <Pressable
+                      key={item.id}
+                      onPress={() => goTo(item.route)}
+                      style={({ pressed }) => [
+                        styles.menuRow,
+                        index < MENU_ITEMS.length - 1 && styles.menuDivider,
+                        pressed && styles.rowPressed,
+                      ]}
+                    >
+                      <View style={styles.iconBox}>
+                        <Ionicons
+                          name={item.icon}
+                          size={21}
+                          color={COLORS.black}
+                        />
+                      </View>
+
+                      <View style={styles.rowText}>
+                        <Text style={styles.rowTitle}>{item.title}</Text>
+                        <Text style={styles.rowSubtitle}>
+                          {item.subtitle}
+                        </Text>
+                      </View>
+
+                      <Ionicons
+                        name="chevron-forward"
+                        size={19}
+                        color="#999999"
+                      />
+                    </Pressable>
+                  ))}
+                </View>
+
+                <Pressable
+                  onPress={handleSignOut}
+                  disabled={isSigningOut}
+                  style={({ pressed }) => [
+                    styles.logoutButton,
+                    pressed && !isSigningOut && styles.logoutPressed,
+                  ]}
+                >
+                  {isSigningOut ? (
+                    <ActivityIndicator size="small" color={COLORS.danger} />
+                  ) : (
+                    <>
+                      <Ionicons
+                        name="log-out-outline"
+                        size={19}
+                        color={COLORS.danger}
+                      />
+                      <Text style={styles.logoutText}>Sign Out</Text>
+                    </>
+                  )}
+                </Pressable>
+              </>
+            )}
+
+            <Text style={styles.footer}>RenewX</Text>
+          </View>
+        </ScrollView>
       </View>
-
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[
-          styles.content,
-          { width: contentWidth, alignSelf: "center" },
-        ]}
-        showsVerticalScrollIndicator={false}
-        bounces
-      >
-        {isSignedIn && user ? (
-          <>
-            <View style={styles.accountHero}>
-              {user.imageUrl ? (
-                <Image source={{ uri: user.imageUrl }} style={styles.avatar} />
-              ) : (
-                <View style={styles.avatarFallback}>
-                  <Text style={styles.avatarLetter}>{firstName.charAt(0).toUpperCase()}</Text>
-                </View>
-              )}
-
-              <Text style={styles.name}>{displayName}</Text>
-              {email ? <Text style={styles.email}>{email}</Text> : null}
-
-              {isAdmin ? (
-                <Pressable
-                  onPress={() => go("/admin")}
-                  style={({ pressed }) => [styles.adminButton, pressed && styles.pressed]}
-                >
-                  <Ionicons name="shield-checkmark-outline" size={18} color="#FFFFFF" />
-                  <Text style={styles.adminText}>Admin Dashboard</Text>
-                </Pressable>
-              ) : null}
-            </View>
-
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>ACCOUNT</Text>
-
-              {ACCOUNT_ACTIONS.map((action) => (
-                <Pressable
-                  key={action.title}
-                  onPress={() => go(action.route)}
-                  style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-                >
-                  <View style={styles.iconBox}>
-                    <Ionicons name={action.icon} size={22} color={BLACK} />
-                  </View>
-
-                  <View style={styles.rowContent}>
-                    <Text style={styles.rowTitle}>{action.title}</Text>
-                    <Text style={styles.rowSubtitle}>{action.subtitle}</Text>
-                  </View>
-
-                  <Ionicons name="chevron-forward" size={20} color="#999999" />
-                </Pressable>
-              ))}
-            </View>
-
-            <Pressable
-              onPress={handleSignOut}
-              style={({ pressed }) => [styles.signOut, pressed && styles.signOutPressed]}
-            >
-              <Ionicons name="log-out-outline" size={20} color="#D93025" />
-              <Text style={styles.signOutText}>Sign Out</Text>
-            </Pressable>
-          </>
-        ) : (
-          <>
-            <View style={styles.guestHero}>
-              <View style={styles.guestAvatar}>
-                <Ionicons name="person-outline" size={48} color="#444444" />
-              </View>
-
-              <Text style={styles.guestTitle}>Welcome to RenewX</Text>
-              <Text style={styles.guestSubtitle}>
-                Sign in to access your account, orders, favorites and more.
-              </Text>
-
-              <Pressable
-                onPress={() => go("/sign-in")}
-                style={({ pressed }) => [styles.signInButton, pressed && styles.signInPressed]}
-              >
-                <Text style={styles.signInButtonText}>Sign In / Create Account</Text>
-                <Ionicons name="arrow-forward" size={19} color="#FFFFFF" />
-              </Pressable>
-            </View>
-
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>EXPLORE RENEWX</Text>
-
-              <Pressable
-                onPress={() => go("/favorites")}
-                style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-              >
-                <View style={styles.iconBox}>
-                  <Ionicons name="heart-outline" size={22} color={BLACK} />
-                </View>
-
-                <View style={styles.rowContent}>
-                  <Text style={styles.rowTitle}>Favorites</Text>
-                  <Text style={styles.rowSubtitle}>View your saved products</Text>
-                </View>
-
-                <Ionicons name="chevron-forward" size={20} color="#999999" />
-              </Pressable>
-            </View>
-          </>
-        )}
-
-        <Text style={styles.footer}>RenewX</Text>
-      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#FFFFFF" },
-  loading: { flex: 1, alignItems: "center", justifyContent: "center" },
-
+  safeArea: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  screen: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  loading: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.background,
+  },
   header: {
-    height: 62,
-    backgroundColor: "#FFFFFF",
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
+    height: 58,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: COLORS.white,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.border,
   },
-  headerTitle: { fontSize: 22, fontWeight: "700", color: TEXT },
-
-  scroll: { flex: 1, backgroundColor: "#F8F8F8" },
-  content: { paddingTop: 30, paddingBottom: 35 },
-
-  accountHero: { alignItems: "center", paddingHorizontal: 16, paddingBottom: 30 },
-  guestHero: { alignItems: "center", paddingHorizontal: 16, paddingTop: 4, paddingBottom: 30 },
-
-  avatar: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: "#EEEEEE",
-    marginBottom: 15,
-  },
-  avatarFallback: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: "#EDEDEF",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 15,
-  },
-  avatarLetter: { fontSize: 34, fontWeight: "700", color: BLACK },
-
-  guestAvatar: {
-    width: 106,
-    height: 106,
-    borderRadius: 53,
-    backgroundColor: "#ECECEE",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 22,
-  },
-
-  name: { fontSize: 27, lineHeight: 34, fontWeight: "700", color: TEXT, textAlign: "center" },
-  email: { marginTop: 5, fontSize: 14, color: MUTED, textAlign: "center" },
-
-  guestTitle: {
-    fontSize: 27,
-    lineHeight: 34,
+  headerTitle: {
+    fontSize: 18,
     fontWeight: "700",
-    color: TEXT,
+    color: COLORS.text,
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 32,
+  },
+  content: {
+    width: "100%",
+    maxWidth: 520,
+    alignSelf: "center",
+    paddingHorizontal: 20,
+    paddingTop: 22,
+  },
+
+  guestHero: {
+    alignItems: "center",
+    paddingTop: 18,
+    paddingBottom: 30,
+  },
+  guestAvatar: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: COLORS.soft,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+  },
+  guestTitle: {
+    fontSize: 25,
+    lineHeight: 32,
+    fontWeight: "700",
+    color: COLORS.text,
     textAlign: "center",
   },
   guestSubtitle: {
-    marginTop: 10,
-    maxWidth: 430,
-    fontSize: 15,
-    lineHeight: 23,
-    color: MUTED,
+    maxWidth: 390,
+    marginTop: 9,
+    fontSize: 14,
+    lineHeight: 21,
+    color: COLORS.muted,
     textAlign: "center",
   },
-
-  signInButton: {
+  authButtons: {
     width: "100%",
     maxWidth: 390,
-    minHeight: 54,
     marginTop: 24,
-    paddingHorizontal: 22,
+    gap: 10,
+  },
+  signInButton: {
+    width: "100%",
+    height: 54,
     borderRadius: 14,
     backgroundColor: "#111111",
     borderWidth: 1,
@@ -271,85 +448,179 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
-    elevation: 3,
+    gap: 9,
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.16,
+    shadowOpacity: 0.14,
     shadowRadius: 5,
+    elevation: 3,
   },
-  signInButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "700" },
-  signInPressed: { backgroundColor: "#333333", borderColor: "#333333" },
-
-  adminButton: {
-    minHeight: 42,
-    marginTop: 16,
-    paddingHorizontal: 17,
-    borderRadius: 12,
-    backgroundColor: BLACK,
-    flexDirection: "row",
+  signInText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  createButton: {
+    width: "100%",
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1.5,
+    borderColor: "#111111",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
   },
-  adminText: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
+  createButtonText: {
+    color: "#111111",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  createButtonPressed: {
+    backgroundColor: "#F1F1F1",
+  },
 
-  card: {
-    width: "100%",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: BORDER,
-    overflow: "hidden",
-  },
-  cardTitle: {
-    paddingHorizontal: 19,
-    paddingTop: 18,
-    paddingBottom: 12,
+  sectionLabel: {
+    marginBottom: 9,
+    paddingHorizontal: 2,
     fontSize: 12,
     fontWeight: "800",
-    letterSpacing: 1,
+    letterSpacing: 0.8,
     color: "#777777",
   },
-
-  row: {
+  menuCard: {
+    width: "100%",
+    backgroundColor: COLORS.white,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: "hidden",
+  },
+  menuRow: {
     minHeight: 76,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
+    paddingHorizontal: 15,
+    paddingVertical: 11,
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: COLORS.white,
   },
-  rowPressed: { backgroundColor: "#F6F6F6" },
+  menuDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.border,
+  },
   iconBox: {
-    width: 44,
-    height: 44,
+    width: 43,
+    height: 43,
     borderRadius: 13,
-    backgroundColor: "#F3F3F3",
+    backgroundColor: "#F4F4F5",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 14,
+    marginRight: 13,
   },
-  rowContent: { flex: 1, minWidth: 0 },
-  rowTitle: { fontSize: 16, fontWeight: "700", color: TEXT },
-  rowSubtitle: { marginTop: 3, fontSize: 13, lineHeight: 18, color: MUTED },
+  rowText: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+  },
+  rowTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: COLORS.text,
+    marginBottom: 3,
+  },
+  rowSubtitle: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#929298",
+  },
+  rowPressed: {
+    backgroundColor: "#F8F8F8",
+  },
 
-  signOut: {
+  profileHero: {
+    alignItems: "center",
+    paddingTop: 8,
+    paddingBottom: 18,
+  },
+  profileImage: {
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+    backgroundColor: COLORS.soft,
+    marginBottom: 13,
+  },
+  profileAvatar: {
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+    backgroundColor: "#E8E8EC",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 13,
+  },
+  initials: {
+    fontSize: 29,
+    fontWeight: "700",
+    color: "#45454C",
+  },
+  userName: {
+    maxWidth: "92%",
+    fontSize: 22,
+    fontWeight: "700",
+    color: COLORS.text,
+    textAlign: "center",
+  },
+  userEmail: {
+    maxWidth: "92%",
+    marginTop: 5,
+    fontSize: 13,
+    color: "#85858B",
+    textAlign: "center",
+  },
+  adminButton: {
+    height: 40,
+    marginTop: 13,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    backgroundColor: COLORS.black,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+  adminText: {
+    color: COLORS.white,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  logoutButton: {
     height: 52,
     marginTop: 18,
-    borderRadius: 14,
-    backgroundColor: "#FFF8F8",
+    borderRadius: 15,
+    backgroundColor: "#FFF7F7",
     borderWidth: 1,
-    borderColor: "#F1D8D8",
+    borderColor: "#F2DEDE",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
   },
-  signOutPressed: { backgroundColor: "#FFF0F0" },
-  signOutText: { fontSize: 15, fontWeight: "700", color: "#D93025" },
-
-  pressed: { opacity: 0.82 },
-  footer: { marginTop: 26, textAlign: "center", color: "#AAAAAA", fontSize: 13 },
+  logoutPressed: {
+    opacity: 0.7,
+  },
+  logoutText: {
+    color: COLORS.danger,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  buttonPressed: {
+    opacity: 0.82,
+    transform: [{ scale: 0.99 }],
+  },
+  footer: {
+    marginTop: 26,
+    textAlign: "center",
+    color: "#B0B0B4",
+    fontSize: 11,
+  },
 });
