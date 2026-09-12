@@ -4,9 +4,11 @@ import { ProductCardProps } from '@/constants/types'
 import { Link } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { COLORS } from '@/constants'
+import { useWishList } from '../context/WishListContext'
 
 export default function ProductCard({ product }: ProductCardProps) {
-    const [isLiked, setIsLiked] = useState(false)
+    const { isInWishlist, toggleWishlist } = useWishList()
+    const [isLiked, setIsLiked] = useState(isInWishlist(product._id))
 
     const discount = product.comparePrice && product.comparePrice > product.price
         ? Math.round(((product.comparePrice - product.price) / product.comparePrice) * 100)
@@ -14,17 +16,17 @@ export default function ProductCard({ product }: ProductCardProps) {
 
     return (
         <Link href={{ pathname: '/product/[id]' as any, params: { id: product._id } }} asChild>
-            <TouchableOpacity 
-                activeOpacity={0.85} 
+            <TouchableOpacity
+                activeOpacity={0.85}
                 className='w-[48%] mb-4 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden'
             >
                 {/* Product Image Container */}
                 <View className='relative w-full h-48 bg-gray-50 items-center justify-center'>
                     {product.images && product.images.length > 0 ? (
-                        <Image 
-                            source={{ uri: product.images[0] ?? '' }} 
-                            className='w-full h-full' 
-                            resizeMode='cover' 
+                        <Image
+                            source={{ uri: product.images[0] ?? '' }}
+                            className='w-full h-full'
+                            resizeMode='cover'
                         />
                     ) : (
                         <Ionicons name='image-outline' size={40} color={COLORS.secondary} />
@@ -45,18 +47,19 @@ export default function ProductCard({ product }: ProductCardProps) {
                     </View>
 
                     {/* Favorite Icon */}
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         activeOpacity={0.7}
                         className='absolute top-2 right-2 bg-white/90 p-2 rounded-full shadow-sm items-center justify-center'
-                        onPress={(e) => { 
+                        onPress={(e) => {
                             e.stopPropagation();
+                            toggleWishlist(product)
                             setIsLiked(!isLiked);
                         }}
                     >
-                        <Ionicons 
-                            name={isLiked ? 'heart' : 'heart-outline'} 
-                            size={18} 
-                            color={isLiked ? COLORS.accent : COLORS.primary} 
+                        <Ionicons
+                            name={isLiked ? 'heart' : 'heart-outline'}
+                            size={18}
+                            color={isLiked ? COLORS.accent : COLORS.primary}
                         />
                     </TouchableOpacity>
                 </View>
@@ -94,7 +97,7 @@ export default function ProductCard({ product }: ProductCardProps) {
                             )}
                         </View>
 
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             activeOpacity={0.7}
                             className='bg-black p-2 rounded-xl items-center justify-center'
                             onPress={(e) => {
