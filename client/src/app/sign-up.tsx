@@ -1,0 +1,1 @@
+export { default } from "../../assets/auth/sign-up";
