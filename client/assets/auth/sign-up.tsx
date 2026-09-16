@@ -9,9 +9,7 @@ import {
     ActivityIndicator,
     KeyboardAvoidingView,
     Platform,
-    Pressable,
     ScrollView,
-    StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
@@ -21,7 +19,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 WebBrowser.maybeCompleteAuthSession();
 
-export default function Page() {
+export default function SignUpPage() {
     const { isLoaded, signUp, setActive } = useSignUp();
     const { startSSOFlow } = useSSO();
     const router = useRouter();
@@ -33,13 +31,10 @@ export default function Page() {
     const [confirmPassword, setConfirmPassword] = React.useState("");
     const [code, setCode] = React.useState("");
 
-    const [showPassword, setShowPassword] =
-        React.useState(false);
-    const [showConfirmPassword, setShowConfirmPassword] =
-        React.useState(false);
+    const [showPassword, setShowPassword] = React.useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = React.useState(false);
 
-    const [showVerification, setShowVerification] =
-        React.useState(false);
+    const [showVerification, setShowVerification] = React.useState(false);
 
     const [loading, setLoading] = React.useState(false);
     const [error, setError] = React.useState("");
@@ -69,9 +64,7 @@ export default function Page() {
         }
 
         if (password.length < 8) {
-            setError(
-                "Password must contain at least 8 characters."
-            );
+            setError("Password must contain at least 8 characters.");
             return false;
         }
 
@@ -83,16 +76,10 @@ export default function Page() {
         return true;
     };
 
-    /*
-     * -----------------------------------------
-     * EMAIL / PASSWORD SIGN UP
-     * -----------------------------------------
-     */
     const onSignUpPress = async () => {
         if (!isLoaded || loading) return;
 
         setError("");
-
         if (!validateForm()) return;
 
         setLoading(true);
@@ -105,9 +92,6 @@ export default function Page() {
                 password,
             });
 
-            /*
-             * Send email verification code.
-             */
             await signUpAttempt.prepareEmailAddressVerification({
                 strategy: "email_code",
             });
@@ -121,55 +105,23 @@ export default function Page() {
         }
     };
 
-    /*
-     * -----------------------------------------
-     * GOOGLE SIGN UP
-     * -----------------------------------------
-     */
     const onGooglePress = async () => {
         if (loading) return;
-
         setError("");
         setLoading(true);
 
         try {
-            /*
-             * Web:
-             * Use the current page as the OAuth callback.
-             *
-             * Native:
-             * Clerk handles the native redirect configuration.
-             */
-            const redirectUrl =
-                Platform.OS === "web"
-                    ? window.location.href
-                    : undefined;
-
-            const {
-                createdSessionId,
-                setActive: setSSOActive,
-            } = await startSSOFlow({
+            const redirectUrl = Platform.OS === "web" ? window.location.href : undefined;
+            const { createdSessionId, setActive: setSSOActive } = await startSSOFlow({
                 strategy: "oauth_google",
                 ...(redirectUrl ? { redirectUrl } : {}),
             });
 
-            /*
-             * Google authentication completed.
-             * Activate the Clerk session before navigating.
-             */
             if (createdSessionId && setSSOActive) {
                 await setSSOActive({
                     session: createdSessionId,
                 });
-
-                /*
-                 * Give Clerk a moment to synchronize the
-                 * active session before changing screens.
-                 */
-                await new Promise((resolve) =>
-                    setTimeout(resolve, 50)
-                );
-
+                await new Promise((resolve) => setTimeout(resolve, 50));
                 router.replace("/");
             }
         } catch (err) {
@@ -180,11 +132,6 @@ export default function Page() {
         }
     };
 
-    /*
-     * -----------------------------------------
-     * EMAIL VERIFICATION
-     * -----------------------------------------
-     */
     const onVerifyPress = async () => {
         if (!isLoaded || loading || !code.trim()) return;
 
@@ -192,22 +139,17 @@ export default function Page() {
         setLoading(true);
 
         try {
-            const verificationAttempt =
-                await signUp.attemptEmailAddressVerification({
-                    code: code.trim(),
-                });
+            const verificationAttempt = await signUp.attemptEmailAddressVerification({
+                code: code.trim(),
+            });
 
             if (verificationAttempt.status === "complete") {
                 await setActive({
-                    session:
-                        verificationAttempt.createdSessionId,
+                    session: verificationAttempt.createdSessionId,
                 });
-
                 router.replace("/");
             } else {
-                setError(
-                    "Verification is not complete yet. Please follow the remaining steps."
-                );
+                setError("Verification is not complete yet. Please follow the remaining steps.");
             }
         } catch (err) {
             console.error("Verification error:", err);
@@ -219,244 +161,130 @@ export default function Page() {
 
     const onBackPress = () => {
         if (loading) return;
-
         if (showVerification) {
             setShowVerification(false);
             setCode("");
             setError("");
             return;
         }
-
         router.back();
     };
 
     return (
-        <SafeAreaView
-            style={styles.safeArea}
-            edges={["top", "bottom"]}
-        >
+        <SafeAreaView className="flex-1 bg-white" edges={["top", "bottom"]}>
             <KeyboardAvoidingView
-                style={styles.keyboard}
-                behavior={
-                    Platform.OS === "ios"
-                        ? "padding"
-                        : undefined
-                }
+                className="flex-1"
+                behavior={Platform.OS === "ios" ? "padding" : undefined}
             >
                 <ScrollView
-                    style={styles.scroll}
-                    contentContainerStyle={styles.scrollContent}
+                    className="flex-1"
+                    contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }}
                     keyboardShouldPersistTaps="handled"
                     showsVerticalScrollIndicator={false}
                 >
-                    <View style={styles.container}>
+                    <View className="flex-1 px-6 pt-4 max-w-md w-full self-center">
                         {/* Back button */}
                         <TouchableOpacity
                             onPress={onBackPress}
-                            style={styles.backButton}
-                            hitSlop={12}
+                            className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center mb-6"
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                             disabled={loading}
                         >
-                            <Ionicons
-                                name="arrow-back"
-                                size={23}
-                                color={COLORS.primary}
-                            />
+                            <Ionicons name="arrow-back" size={22} color="#111111" />
                         </TouchableOpacity>
 
                         {!showVerification ? (
-                            <View style={styles.formContainer}>
+                            <View className="w-full">
                                 {/* Header */}
-                                <View style={styles.header}>
-                                    <View
-                                        style={styles.logoCircle}
-                                    >
-                                        <Ionicons
-                                            name="person-add-outline"
-                                            size={27}
-                                            color={
-                                                COLORS.primary
-                                            }
-                                        />
+                                <View className="items-center mb-8">
+                                    <View className="w-16 h-16 rounded-2xl bg-gray-100 items-center justify-center mb-4">
+                                        <Ionicons name="person-add-outline" size={30} color="#111111" />
                                     </View>
-
-                                    <Text style={styles.title}>
+                                    <Text className="text-2xl font-bold text-gray-900">
                                         Create Account
                                     </Text>
-
-                                    <Text
-                                        style={styles.subtitle}
-                                    >
-                                        Join RenewX and start
-                                        shopping
+                                    <Text className="text-sm text-gray-500 mt-1 text-center">
+                                        Join RenewX and start shopping
                                     </Text>
                                 </View>
 
                                 {/* Error */}
                                 {error ? (
-                                    <View
-                                        style={
-                                            styles.errorContainer
-                                        }
-                                    >
-                                        <Ionicons
-                                            name="alert-circle-outline"
-                                            size={19}
-                                            color={
-                                                COLORS.error
-                                            }
-                                        />
-
-                                        <Text
-                                            style={
-                                                styles.errorText
-                                            }
-                                        >
+                                    <View className="bg-red-50 border border-red-200 rounded-xl p-3 flex-row items-center mb-5">
+                                        <Ionicons name="alert-circle-outline" size={20} color="#DC2626" />
+                                        <Text className="text-red-700 text-xs font-medium ml-2 flex-1">
                                             {error}
                                         </Text>
                                     </View>
                                 ) : null}
 
                                 {/* Google */}
-                                <Pressable
+                                <TouchableOpacity
                                     onPress={onGooglePress}
                                     disabled={loading}
-                                    style={({ pressed }) => [
-                                        styles.googleButton,
-                                        pressed &&
-                                            !loading &&
-                                            styles.pressed,
-                                    ]}
+                                    activeOpacity={0.8}
+                                    className="w-full py-3.5 px-4 rounded-2xl bg-white border border-gray-200 flex-row items-center justify-center mb-6 shadow-sm"
                                 >
-                                    <Ionicons
-                                        name="logo-google"
-                                        size={19}
-                                        color="#4285F4"
-                                    />
-
-                                    <Text
-                                        style={
-                                            styles.googleButtonText
-                                        }
-                                    >
+                                    <Ionicons name="logo-google" size={20} color="#4285F4" />
+                                    <Text className="text-gray-800 font-semibold text-sm ml-3">
                                         Continue with Google
                                     </Text>
-                                </Pressable>
+                                </TouchableOpacity>
 
                                 {/* Divider */}
-                                <View
-                                    style={
-                                        styles.dividerContainer
-                                    }
-                                >
-                                    <View
-                                        style={styles.divider}
-                                    />
-
-                                    <Text
-                                        style={
-                                            styles.dividerText
-                                        }
-                                    >
-                                        OR
+                                <View className="flex-row items-center mb-6">
+                                    <View className="flex-1 h-[1px] bg-gray-200" />
+                                    <Text className="mx-4 text-xs font-semibold text-gray-400 uppercase">
+                                        or sign up with email
                                     </Text>
-
-                                    <View
-                                        style={styles.divider}
-                                    />
+                                    <View className="flex-1 h-[1px] bg-gray-200" />
                                 </View>
 
-                                {/* First + Last name */}
-                                <View
-                                    style={
-                                        styles.nameRow
-                                    }
-                                >
-                                    <View
-                                        style={
-                                            styles.nameField
-                                        }
-                                    >
-                                        <Text
-                                            style={
-                                                styles.label
-                                            }
-                                        >
-                                            First Name
+                                {/* Names Row */}
+                                <View className="flex-row space-x-3 mb-4">
+                                    <View className="flex-1 mr-2">
+                                        <Text className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                                            First Name *
                                         </Text>
-
                                         <TextInput
-                                            style={
-                                                styles.input
-                                            }
+                                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-sm text-gray-900"
                                             placeholder="John"
-                                            placeholderTextColor="#999"
-                                            autoCapitalize="words"
-                                            autoCorrect={false}
+                                            placeholderTextColor="#9CA3AF"
                                             value={firstName}
                                             editable={!loading}
-                                            onChangeText={(
-                                                value
-                                            ) => {
-                                                setFirstName(
-                                                    value
-                                                );
-
-                                                if (error) {
-                                                    setError("");
-                                                }
+                                            onChangeText={(value) => {
+                                                setFirstName(value);
+                                                if (error) setError("");
                                             }}
                                         />
                                     </View>
-
-                                    <View
-                                        style={
-                                            styles.nameField
-                                        }
-                                    >
-                                        <Text
-                                            style={
-                                                styles.label
-                                            }
-                                        >
+                                    <View className="flex-1 ml-1">
+                                        <Text className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                                             Last Name
                                         </Text>
-
                                         <TextInput
-                                            style={
-                                                styles.input
-                                            }
+                                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-sm text-gray-900"
                                             placeholder="Doe"
-                                            placeholderTextColor="#999"
-                                            autoCapitalize="words"
-                                            autoCorrect={false}
+                                            placeholderTextColor="#9CA3AF"
                                             value={lastName}
                                             editable={!loading}
-                                            onChangeText={(
-                                                value
-                                            ) => {
-                                                setLastName(
-                                                    value
-                                                );
-
-                                                if (error) {
-                                                    setError("");
-                                                }
+                                            onChangeText={(value) => {
+                                                setLastName(value);
+                                                if (error) setError("");
                                             }}
                                         />
                                     </View>
                                 </View>
 
                                 {/* Email */}
-                                <View style={styles.field}>
-                                    <Text style={styles.label}>
-                                        Email
+                                <View className="mb-4">
+                                    <Text className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                                        Email *
                                     </Text>
-
                                     <TextInput
-                                        style={styles.input}
+                                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-sm text-gray-900"
                                         placeholder="user@example.com"
-                                        placeholderTextColor="#999"
+                                        placeholderTextColor="#9CA3AF"
                                         autoCapitalize="none"
                                         autoCorrect={false}
                                         keyboardType="email-address"
@@ -464,365 +292,187 @@ export default function Page() {
                                         autoComplete="email"
                                         value={emailAddress}
                                         editable={!loading}
-                                        onChangeText={(
-                                            value
-                                        ) => {
-                                            setEmailAddress(
-                                                value
-                                            );
-
-                                            if (error) {
-                                                setError("");
-                                            }
+                                        onChangeText={(value) => {
+                                            setEmailAddress(value);
+                                            if (error) setError("");
                                         }}
                                     />
                                 </View>
 
                                 {/* Password */}
-                                <View style={styles.field}>
-                                    <Text style={styles.label}>
-                                        Password
+                                <View className="mb-4">
+                                    <Text className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                                        Password * (min 8 chars)
                                     </Text>
-
-                                    <View
-                                        style={
-                                            styles.passwordContainer
-                                        }
-                                    >
+                                    <View className="w-full bg-gray-50 border border-gray-200 rounded-xl flex-row items-center px-4">
                                         <TextInput
-                                            style={
-                                                styles.passwordInput
-                                            }
-                                            placeholder="At least 8 characters"
-                                            placeholderTextColor="#999"
-                                            secureTextEntry={
-                                                !showPassword
-                                            }
+                                            className="flex-1 py-3.5 text-sm text-gray-900"
+                                            placeholder="Create a strong password"
+                                            placeholderTextColor="#9CA3AF"
+                                            secureTextEntry={!showPassword}
                                             textContentType="newPassword"
-                                            autoComplete="password-new"
+                                            autoComplete="new-password"
                                             value={password}
                                             editable={!loading}
-                                            onChangeText={(
-                                                value
-                                            ) => {
-                                                setPassword(
-                                                    value
-                                                );
-
-                                                if (error) {
-                                                    setError("");
-                                                }
+                                            onChangeText={(value) => {
+                                                setPassword(value);
+                                                if (error) setError("");
                                             }}
                                         />
-
                                         <TouchableOpacity
-                                            onPress={() =>
-                                                setShowPassword(
-                                                    (prev) =>
-                                                        !prev
-                                                )
-                                            }
-                                            style={
-                                                styles.eyeButton
-                                            }
-                                            hitSlop={10}
+                                            onPress={() => setShowPassword((prev) => !prev)}
+                                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                                             disabled={loading}
                                         >
                                             <Ionicons
-                                                name={
-                                                    showPassword
-                                                        ? "eye-off-outline"
-                                                        : "eye-outline"
-                                                }
-                                                size={21}
-                                                color="#777"
+                                                name={showPassword ? "eye-off-outline" : "eye-outline"}
+                                                size={20}
+                                                color="#6B7280"
                                             />
                                         </TouchableOpacity>
                                     </View>
                                 </View>
 
-                                {/* Confirm password */}
-                                <View
-                                    style={
-                                        styles.field
-                                    }
-                                >
-                                    <Text style={styles.label}>
-                                        Confirm Password
+                                {/* Confirm Password */}
+                                <View className="mb-6">
+                                    <Text className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                                        Confirm Password *
                                     </Text>
-
-                                    <View
-                                        style={
-                                            styles.passwordContainer
-                                        }
-                                    >
+                                    <View className="w-full bg-gray-50 border border-gray-200 rounded-xl flex-row items-center px-4">
                                         <TextInput
-                                            style={
-                                                styles.passwordInput
-                                            }
-                                            placeholder="Repeat your password"
-                                            placeholderTextColor="#999"
-                                            secureTextEntry={
-                                                !showConfirmPassword
-                                            }
+                                            className="flex-1 py-3.5 text-sm text-gray-900"
+                                            placeholder="Re-enter your password"
+                                            placeholderTextColor="#9CA3AF"
+                                            secureTextEntry={!showConfirmPassword}
                                             textContentType="newPassword"
-                                            autoComplete="password-new"
-                                            value={
-                                                confirmPassword
-                                            }
+                                            autoComplete="new-password"
+                                            value={confirmPassword}
                                             editable={!loading}
-                                            onChangeText={(
-                                                value
-                                            ) => {
-                                                setConfirmPassword(
-                                                    value
-                                                );
-
-                                                if (error) {
-                                                    setError("");
-                                                }
+                                            onChangeText={(value) => {
+                                                setConfirmPassword(value);
+                                                if (error) setError("");
                                             }}
                                         />
-
                                         <TouchableOpacity
-                                            onPress={() =>
-                                                setShowConfirmPassword(
-                                                    (prev) =>
-                                                        !prev
-                                                )
-                                            }
-                                            style={
-                                                styles.eyeButton
-                                            }
-                                            hitSlop={10}
+                                            onPress={() => setShowConfirmPassword((prev) => !prev)}
+                                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                                             disabled={loading}
                                         >
                                             <Ionicons
-                                                name={
-                                                    showConfirmPassword
-                                                        ? "eye-off-outline"
-                                                        : "eye-outline"
-                                                }
-                                                size={21}
-                                                color="#777"
+                                                name={showConfirmPassword ? "eye-off-outline" : "eye-outline"}
+                                                size={20}
+                                                color="#6B7280"
                                             />
                                         </TouchableOpacity>
                                     </View>
                                 </View>
 
-                                {/* Create account */}
-                                <Pressable
+                                {/* Create Account Button */}
+                                <TouchableOpacity
                                     onPress={onSignUpPress}
-                                    disabled={
-                                        loading ||
-                                        !firstName.trim() ||
-                                        !emailAddress.trim() ||
-                                        !password ||
-                                        !confirmPassword
-                                    }
-                                    style={({ pressed }) => [
-                                        styles.primaryButton,
-                                        (loading ||
-                                            !firstName.trim() ||
-                                            !emailAddress.trim() ||
-                                            !password ||
-                                            !confirmPassword) &&
-                                            styles.disabledButton,
-                                        pressed &&
-                                            !loading &&
-                                            styles.pressed,
-                                    ]}
+                                    disabled={loading || !firstName || !emailAddress || !password || !confirmPassword}
+                                    activeOpacity={0.85}
+                                    className={`w-full py-4 rounded-2xl items-center justify-center shadow-sm ${
+                                        loading || !firstName || !emailAddress || !password || !confirmPassword
+                                            ? "bg-gray-300"
+                                            : "bg-black"
+                                    }`}
                                 >
                                     {loading ? (
-                                        <ActivityIndicator
-                                            color="#FFFFFF"
-                                        />
+                                        <ActivityIndicator color="#FFFFFF" size="small" />
                                     ) : (
-                                        <Text
-                                            style={
-                                                styles.primaryButtonText
-                                            }
-                                        >
+                                        <Text className="text-white font-bold text-base">
                                             Create Account
                                         </Text>
                                     )}
-                                </Pressable>
+                                </TouchableOpacity>
 
-                                {/* Sign in */}
-                                <View
-                                    style={
-                                        styles.signinContainer
-                                    }
-                                >
-                                    <Text
-                                        style={
-                                            styles.signupNormal
-                                        }
-                                    >
+                                {/* Sign In Link */}
+                                <View className="flex-row justify-center items-center mt-6">
+                                    <Text className="text-xs text-gray-500">
                                         Already have an account?{" "}
                                     </Text>
-
                                     <Link href="/sign-in">
-                                        <Text
-                                            style={
-                                                styles.signupLink
-                                            }
-                                        >
+                                        <Text className="text-xs font-bold text-black underline">
                                             Sign in
                                         </Text>
                                     </Link>
                                 </View>
                             </View>
                         ) : (
-                            <View
-                                style={styles.formContainer}
-                            >
-                                {/* Verification header */}
-                                <View style={styles.header}>
-                                    <View
-                                        style={
-                                            styles.logoCircle
-                                        }
-                                    >
-                                        <Ionicons
-                                            name="mail-outline"
-                                            size={29}
-                                            color={
-                                                COLORS.primary
-                                            }
-                                        />
+                            /* Verification Code Screen */
+                            <View className="w-full">
+                                <View className="items-center mb-8">
+                                    <View className="w-16 h-16 rounded-2xl bg-gray-100 items-center justify-center mb-4">
+                                        <Ionicons name="shield-checkmark-outline" size={30} color="#111111" />
                                     </View>
-
-                                    <Text
-                                        style={styles.title}
-                                    >
+                                    <Text className="text-2xl font-bold text-gray-900">
                                         Verify Email
                                     </Text>
-
-                                    <Text
-                                        style={
-                                            styles.subtitle
-                                        }
-                                    >
-                                        We sent a verification
-                                        code to{" "}
-                                        {emailAddress}
+                                    <Text className="text-sm text-gray-500 mt-1 text-center">
+                                        Enter the 6-digit code sent to{" "}
+                                        <Text className="font-semibold text-gray-800">{emailAddress}</Text>
                                     </Text>
                                 </View>
 
-                                {/* Error */}
                                 {error ? (
-                                    <View
-                                        style={
-                                            styles.errorContainer
-                                        }
-                                    >
-                                        <Ionicons
-                                            name="alert-circle-outline"
-                                            size={19}
-                                            color={
-                                                COLORS.error
-                                            }
-                                        />
-
-                                        <Text
-                                            style={
-                                                styles.errorText
-                                            }
-                                        >
+                                    <View className="bg-red-50 border border-red-200 rounded-xl p-3 flex-row items-center mb-5">
+                                        <Ionicons name="alert-circle-outline" size={20} color="#DC2626" />
+                                        <Text className="text-red-700 text-xs font-medium ml-2 flex-1">
                                             {error}
                                         </Text>
                                     </View>
                                 ) : null}
 
-                                {/* Code */}
-                                <View style={styles.field}>
-                                    <Text style={styles.label}>
+                                <View className="mb-6">
+                                    <Text className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                                         Verification Code
                                     </Text>
-
                                     <TextInput
-                                        style={[
-                                            styles.input,
-                                            styles.codeInput,
-                                        ]}
+                                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-4 text-center text-xl font-bold tracking-widest text-gray-900"
                                         placeholder="123456"
-                                        placeholderTextColor="#999"
+                                        placeholderTextColor="#9CA3AF"
                                         keyboardType="number-pad"
                                         textContentType="oneTimeCode"
                                         autoComplete="one-time-code"
                                         maxLength={6}
                                         value={code}
                                         editable={!loading}
-                                        onChangeText={(
-                                            value
-                                        ) => {
-                                            setCode(
-                                                value.replace(
-                                                    /[^0-9]/g,
-                                                    ""
-                                                )
-                                            );
-
-                                            if (error) {
-                                                setError("");
-                                            }
+                                        onChangeText={(value) => {
+                                            setCode(value.replace(/[^0-9]/g, ""));
+                                            if (error) setError("");
                                         }}
                                     />
                                 </View>
 
-                                {/* Verify */}
-                                <Pressable
+                                <TouchableOpacity
                                     onPress={onVerifyPress}
-                                    disabled={
-                                        loading ||
-                                        code.length < 6
-                                    }
-                                    style={({ pressed }) => [
-                                        styles.primaryButton,
-                                        (loading ||
-                                            code.length < 6) &&
-                                            styles.disabledButton,
-                                        pressed &&
-                                            !loading &&
-                                            styles.pressed,
-                                    ]}
+                                    disabled={loading || code.length !== 6}
+                                    activeOpacity={0.85}
+                                    className={`w-full py-4 rounded-2xl items-center justify-center shadow-sm ${
+                                        loading || code.length !== 6 ? "bg-gray-300" : "bg-black"
+                                    }`}
                                 >
                                     {loading ? (
-                                        <ActivityIndicator
-                                            color="#FFFFFF"
-                                        />
+                                        <ActivityIndicator color="#FFFFFF" size="small" />
                                     ) : (
-                                        <Text
-                                            style={
-                                                styles.primaryButtonText
-                                            }
-                                        >
-                                            Verify Email
+                                        <Text className="text-white font-bold text-base">
+                                            Complete Sign Up
                                         </Text>
                                     )}
-                                </Pressable>
+                                </TouchableOpacity>
 
-                                {/* Change email */}
                                 <TouchableOpacity
                                     onPress={() => {
-                                        setShowVerification(
-                                            false
-                                        );
+                                        setShowVerification(false);
                                         setCode("");
                                         setError("");
                                     }}
-                                    style={
-                                        styles.backToSignIn
-                                    }
+                                    className="items-center mt-6"
                                     disabled={loading}
                                 >
-                                    <Text
-                                        style={
-                                            styles.backToSignInText
-                                        }
-                                    >
-                                        Use a different email
+                                    <Text className="text-xs font-semibold text-gray-600">
+                                        ← Back to Sign Up
                                     </Text>
                                 </TouchableOpacity>
                             </View>
@@ -833,272 +483,3 @@ export default function Page() {
         </SafeAreaView>
     );
 }
-
-const styles = StyleSheet.create({
-    safeArea: {
-        flex: 1,
-        backgroundColor: "#FFFFFF",
-    },
-
-    keyboard: {
-        flex: 1,
-    },
-
-    scroll: {
-        flex: 1,
-    },
-
-    /*
-     * This is what keeps the entire form vertically centered
-     * on larger screens while still allowing scrolling on
-     * smaller screens / when the keyboard is open.
-     */
-    scrollContent: {
-        flexGrow: 1,
-        justifyContent: "center",
-        paddingVertical: 32,
-    },
-
-    container: {
-        width: "100%",
-        maxWidth: 430,
-        alignSelf: "center",
-        paddingHorizontal: 28,
-        position: "relative",
-    },
-
-    backButton: {
-        position: "absolute",
-        left: 28,
-        top: -4,
-        zIndex: 10,
-        width: 42,
-        height: 42,
-        borderRadius: 21,
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: "#F7F7F7",
-    },
-
-    formContainer: {
-        width: "100%",
-        paddingTop: 45,
-    },
-
-    header: {
-        alignItems: "center",
-        marginBottom: 27,
-    },
-
-    logoCircle: {
-        width: 62,
-        height: 62,
-        borderRadius: 31,
-        backgroundColor: "#F4F4F6",
-        alignItems: "center",
-        justifyContent: "center",
-        marginBottom: 16,
-    },
-
-    title: {
-        fontSize: 27,
-        lineHeight: 33,
-        fontWeight: "700",
-        color: "#111111",
-        textAlign: "center",
-        marginBottom: 7,
-    },
-
-    subtitle: {
-        fontSize: 13,
-        lineHeight: 19,
-        color: "#777777",
-        textAlign: "center",
-        maxWidth: 310,
-    },
-
-    errorContainer: {
-        width: "100%",
-        flexDirection: "row",
-        alignItems: "center",
-        backgroundColor: "#FFF5F5",
-        borderWidth: 1,
-        borderColor: "#FFE1E1",
-        borderRadius: 12,
-        paddingHorizontal: 13,
-        paddingVertical: 11,
-        marginBottom: 16,
-    },
-
-    errorText: {
-        flex: 1,
-        marginLeft: 8,
-        color: "#D44747",
-        fontSize: 12,
-        lineHeight: 17,
-    },
-
-    googleButton: {
-        width: "100%",
-        height: 50,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: "#E2E2E2",
-        backgroundColor: "#FFFFFF",
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        marginBottom: 21,
-    },
-
-    googleButtonText: {
-        marginLeft: 10,
-        color: "#222222",
-        fontSize: 14,
-        fontWeight: "600",
-    },
-
-    dividerContainer: {
-        width: "100%",
-        flexDirection: "row",
-        alignItems: "center",
-        marginBottom: 22,
-    },
-
-    divider: {
-        flex: 1,
-        height: StyleSheet.hairlineWidth,
-        backgroundColor: "#E6E6E6",
-    },
-
-    dividerText: {
-        marginHorizontal: 14,
-        color: "#999999",
-        fontSize: 11,
-        fontWeight: "600",
-    },
-
-    nameRow: {
-        width: "100%",
-        flexDirection: "row",
-        gap: 12,
-        marginBottom: 17,
-    },
-
-    nameField: {
-        flex: 1,
-    },
-
-    field: {
-        width: "100%",
-        marginBottom: 17,
-    },
-
-    label: {
-        color: "#202020",
-        fontSize: 13,
-        fontWeight: "600",
-        marginBottom: 8,
-    },
-
-    input: {
-        width: "100%",
-        height: 52,
-        borderRadius: 12,
-        backgroundColor: "#F7F7F8",
-        paddingHorizontal: 15,
-        color: "#151515",
-        fontSize: 14,
-        borderWidth: 1,
-        borderColor: "#EEEEEF",
-    },
-
-    passwordContainer: {
-        width: "100%",
-        height: 52,
-        borderRadius: 12,
-        backgroundColor: "#F7F7F8",
-        borderWidth: 1,
-        borderColor: "#EEEEEF",
-        flexDirection: "row",
-        alignItems: "center",
-    },
-
-    passwordInput: {
-        flex: 1,
-        height: "100%",
-        paddingHorizontal: 15,
-        paddingRight: 8,
-        color: "#151515",
-        fontSize: 14,
-    },
-
-    eyeButton: {
-        width: 48,
-        height: 52,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-
-    primaryButton: {
-        width: "100%",
-        height: 52,
-        borderRadius: 26,
-        backgroundColor: COLORS.primary,
-        alignItems: "center",
-        justifyContent: "center",
-        marginTop: 4,
-        marginBottom: 25,
-    },
-
-    primaryButtonText: {
-        color: "#FFFFFF",
-        fontSize: 15,
-        fontWeight: "700",
-    },
-
-    disabledButton: {
-        backgroundColor: "#CFCFD2",
-    },
-
-    pressed: {
-        opacity: 0.82,
-        transform: [{ scale: 0.99 }],
-    },
-
-    signinContainer: {
-        flexDirection: "row",
-        justifyContent: "center",
-        alignItems: "center",
-        marginBottom: 5,
-    },
-
-    signupNormal: {
-        color: "#777777",
-        fontSize: 13,
-    },
-
-    signupLink: {
-        color: COLORS.primary,
-        fontSize: 13,
-        fontWeight: "700",
-    },
-
-    codeInput: {
-        textAlign: "center",
-        fontSize: 21,
-        fontWeight: "600",
-        letterSpacing: 6,
-    },
-
-    backToSignIn: {
-        alignItems: "center",
-        paddingVertical: 10,
-    },
-
-    backToSignInText: {
-        color: "#777777",
-        fontSize: 13,
-        fontWeight: "600",
-    },
-});

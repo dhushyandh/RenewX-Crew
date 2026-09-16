@@ -84,7 +84,7 @@ export const createOrder = async (req: Request, res: Response) => {
             if (!product || product.stock < item.quantity) {
                 return res.status(404).json({
                     success: false,
-                    message: `Out of stock: ${product.name}`
+                    message: `Out of stock: ${product?.name || (item.product as any)?.name || 'Item'}`
                 })
             }
             orderItems.push({

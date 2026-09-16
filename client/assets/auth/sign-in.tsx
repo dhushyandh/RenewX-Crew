@@ -10,9 +10,7 @@ import {
     ActivityIndicator,
     KeyboardAvoidingView,
     Platform,
-    Pressable,
     ScrollView,
-    StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
@@ -20,16 +18,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-/*
- * Required for completing OAuth popup sessions on web.
- *
- * Without this, Google authentication can finish in the popup,
- * but the callback may not be handed back to the main window
- * correctly.
- */
 WebBrowser.maybeCompleteAuthSession();
 
-export default function Page() {
+export default function SignInPage() {
     const { signIn, setActive, isLoaded } = useSignIn();
     const { startSSOFlow } = useSSO();
     const router = useRouter();
@@ -56,16 +47,10 @@ export default function Page() {
         return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
     }, []);
 
-    /*
-     * -----------------------------------------
-     * EMAIL / PASSWORD SIGN IN
-     * -----------------------------------------
-     */
     const onSignInPress = async () => {
         if (!isLoaded || loading) return;
 
         setError("");
-
         const email = emailAddress.trim();
 
         if (!email) {
@@ -91,51 +76,33 @@ export default function Page() {
                 password,
             });
 
-            /*
-             * Normal successful login
-             */
             if (signInAttempt.status === "complete") {
                 await setActive({
                     session: signInAttempt.createdSessionId,
                 });
-
                 router.replace("/");
                 return;
             }
 
-            /*
-             * MFA / second factor
-             */
             if (signInAttempt.status === "needs_second_factor") {
-                const emailCodeFactor =
-                    signInAttempt.supportedSecondFactors?.find(
-                        (
-                            factor
-                        ): factor is EmailCodeFactor =>
-                            factor.strategy === "email_code"
-                    );
+                const emailCodeFactor = signInAttempt.supportedSecondFactors?.find(
+                    (factor): factor is EmailCodeFactor => factor.strategy === "email_code"
+                );
 
                 if (emailCodeFactor) {
                     await signIn.prepareSecondFactor({
                         strategy: "email_code",
-                        emailAddressId:
-                            emailCodeFactor.emailAddressId,
+                        emailAddressId: emailCodeFactor.emailAddressId,
                     });
-
                     setShowEmailCode(true);
                     return;
                 }
 
-                setError(
-                    "Additional verification is required, but email verification is unavailable."
-                );
-
+                setError("Additional verification is required, but email verification is unavailable.");
                 return;
             }
 
-            setError(
-                "Additional verification is required to complete sign in."
-            );
+            setError("Additional verification is required to complete sign in.");
         } catch (err) {
             console.error("Sign in error:", err);
             setError(getClerkError(err));
@@ -144,55 +111,23 @@ export default function Page() {
         }
     };
 
-    /*
-     * -----------------------------------------
-     * GOOGLE SIGN IN
-     * -----------------------------------------
-     */
     const onGooglePress = async () => {
         if (loading) return;
-
         setError("");
         setLoading(true);
 
         try {
-            /*
-             * On web Clerk can use the current page as the
-             * redirect destination.
-             *
-             * On native we create an Expo redirect URI.
-             */
-            const redirectUrl =
-                Platform.OS === "web"
-                    ? window.location.href
-                    : undefined;
-
-            const {
-                createdSessionId,
-                setActive: setSSOActive,
-            } = await startSSOFlow({
+            const redirectUrl = Platform.OS === "web" ? window.location.href : undefined;
+            const { createdSessionId, setActive: setSSOActive } = await startSSOFlow({
                 strategy: "oauth_google",
                 ...(redirectUrl ? { redirectUrl } : {}),
             });
 
-            /*
-             * Google authentication succeeded.
-             *
-             * Activate the Clerk session BEFORE navigating.
-             */
             if (createdSessionId && setSSOActive) {
                 await setSSOActive({
                     session: createdSessionId,
                 });
-
-                /*
-                 * Give Clerk one tick to update its session
-                 * state before replacing the route.
-                 */
-                await new Promise((resolve) =>
-                    setTimeout(resolve, 50)
-                );
-
+                await new Promise((resolve) => setTimeout(resolve, 50));
                 router.replace("/");
             }
         } catch (err) {
@@ -203,22 +138,11 @@ export default function Page() {
         }
     };
 
-    /*
-     * -----------------------------------------
-     * SECOND FACTOR VERIFICATION
-     * -----------------------------------------
-     */
     const onVerifyPress = async () => {
         if (!isLoaded || loading) return;
 
         const verificationCode = code.trim();
-
-        if (!verificationCode) {
-            setError("Please enter the verification code.");
-            return;
-        }
-
-        if (verificationCode.length !== 6) {
+        if (!verificationCode || verificationCode.length !== 6) {
             setError("Please enter the 6-digit verification code.");
             return;
         }
@@ -236,14 +160,11 @@ export default function Page() {
                 await setActive({
                     session: attempt.createdSessionId,
                 });
-
                 router.replace("/");
                 return;
             }
 
-            setError(
-                "Verification is not complete yet. Please try again."
-            );
+            setError("Verification is not complete yet. Please try again.");
         } catch (err) {
             console.error("Verification error:", err);
             setError(getClerkError(err));
@@ -254,146 +175,94 @@ export default function Page() {
 
     const onBackPress = () => {
         if (loading) return;
-
         if (showEmailCode) {
             setShowEmailCode(false);
             setCode("");
             setError("");
             return;
         }
-
         router.back();
     };
 
     return (
-        <SafeAreaView
-            style={styles.safeArea}
-            edges={["top", "bottom"]}
-        >
+        <SafeAreaView className="flex-1 bg-white" edges={["top", "bottom"]}>
             <KeyboardAvoidingView
-                style={styles.keyboard}
-                behavior={
-                    Platform.OS === "ios"
-                        ? "padding"
-                        : undefined
-                }
+                className="flex-1"
+                behavior={Platform.OS === "ios" ? "padding" : undefined}
             >
                 <ScrollView
-                    style={styles.scroll}
-                    contentContainerStyle={styles.scrollContent}
+                    className="flex-1"
+                    contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }}
                     keyboardShouldPersistTaps="handled"
                     showsVerticalScrollIndicator={false}
                 >
-                    <View style={styles.container}>
-                        {/* Back */}
+                    <View className="flex-1 px-6 pt-4 max-w-md w-full self-center">
+                        {/* Back Button */}
                         <TouchableOpacity
                             onPress={onBackPress}
-                            style={styles.backButton}
-                            hitSlop={12}
+                            className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center mb-6"
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                             disabled={loading}
                         >
-                            <Ionicons
-                                name="arrow-back"
-                                size={23}
-                                color={COLORS.primary}
-                            />
+                            <Ionicons name="arrow-back" size={22} color="#111111" />
                         </TouchableOpacity>
 
                         {!showEmailCode ? (
-                            <View style={styles.formContainer}>
+                            <View className="w-full">
                                 {/* Header */}
-                                <View style={styles.header}>
-                                    <View style={styles.logoCircle}>
-                                        <Ionicons
-                                            name="person-outline"
-                                            size={26}
-                                            color={COLORS.primary}
-                                        />
+                                <View className="items-center mb-8">
+                                    <View className="w-16 h-16 rounded-2xl bg-gray-100 items-center justify-center mb-4">
+                                        <Ionicons name="person-outline" size={30} color="#111111" />
                                     </View>
-
-                                    <Text style={styles.title}>
+                                    <Text className="text-2xl font-bold text-gray-900">
                                         Welcome Back
                                     </Text>
-
-                                    <Text style={styles.subtitle}>
+                                    <Text className="text-sm text-gray-500 mt-1 text-center">
                                         Sign in to continue to RenewX
                                     </Text>
                                 </View>
 
-                                {/* Error */}
+                                {/* Error message */}
                                 {error ? (
-                                    <View
-                                        style={
-                                            styles.errorContainer
-                                        }
-                                    >
-                                        <Ionicons
-                                            name="alert-circle-outline"
-                                            size={19}
-                                            color={COLORS.error}
-                                        />
-
-                                        <Text
-                                            style={styles.errorText}
-                                        >
+                                    <View className="bg-red-50 border border-red-200 rounded-xl p-3 flex-row items-center mb-5">
+                                        <Ionicons name="alert-circle-outline" size={20} color="#DC2626" />
+                                        <Text className="text-red-700 text-xs font-medium ml-2 flex-1">
                                             {error}
                                         </Text>
                                     </View>
                                 ) : null}
 
-                                {/* Google */}
-                                <Pressable
+                                {/* Google Button */}
+                                <TouchableOpacity
                                     onPress={onGooglePress}
                                     disabled={loading}
-                                    style={({ pressed }) => [
-                                        styles.googleButton,
-                                        pressed &&
-                                            !loading &&
-                                            styles.pressed,
-                                    ]}
+                                    activeOpacity={0.8}
+                                    className="w-full py-3.5 px-4 rounded-2xl bg-white border border-gray-200 flex-row items-center justify-center mb-6 shadow-sm"
                                 >
-                                    <Ionicons
-                                        name="logo-google"
-                                        size={19}
-                                        color="#4285F4"
-                                    />
-
-                                    <Text
-                                        style={
-                                            styles.googleButtonText
-                                        }
-                                    >
+                                    <Ionicons name="logo-google" size={20} color="#4285F4" />
+                                    <Text className="text-gray-800 font-semibold text-sm ml-3">
                                         Continue with Google
                                     </Text>
-                                </Pressable>
+                                </TouchableOpacity>
 
                                 {/* Divider */}
-                                <View style={styles.dividerContainer}>
-                                    <View
-                                        style={styles.divider}
-                                    />
-
-                                    <Text
-                                        style={styles.dividerText}
-                                    >
-                                        OR
+                                <View className="flex-row items-center mb-6">
+                                    <View className="flex-1 h-[1px] bg-gray-200" />
+                                    <Text className="mx-4 text-xs font-semibold text-gray-400 uppercase">
+                                        or sign in with email
                                     </Text>
-
-                                    <View
-                                        style={styles.divider}
-                                    />
+                                    <View className="flex-1 h-[1px] bg-gray-200" />
                                 </View>
 
-                                {/* Email */}
-                                <View style={styles.field}>
-                                    <Text style={styles.label}>
+                                {/* Email Field */}
+                                <View className="mb-4">
+                                    <Text className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                                         Email
                                     </Text>
-
                                     <TextInput
-                                        style={styles.input}
+                                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-sm text-gray-900"
                                         placeholder="user@example.com"
-                                        placeholderTextColor="#999"
+                                        placeholderTextColor="#9CA3AF"
                                         autoCapitalize="none"
                                         autoCorrect={false}
                                         keyboardType="email-address"
@@ -402,233 +271,122 @@ export default function Page() {
                                         value={emailAddress}
                                         editable={!loading}
                                         onChangeText={(value) => {
-                                            setEmailAddress(
-                                                value
-                                            );
-
-                                            if (error) {
-                                                setError("");
-                                            }
+                                            setEmailAddress(value);
+                                            if (error) setError("");
                                         }}
                                     />
                                 </View>
 
-                                {/* Password */}
-                                <View style={styles.field}>
-                                    <Text style={styles.label}>
+                                {/* Password Field */}
+                                <View className="mb-2">
+                                    <Text className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                                         Password
                                     </Text>
-
-                                    <View
-                                        style={
-                                            styles.passwordContainer
-                                        }
-                                    >
+                                    <View className="w-full bg-gray-50 border border-gray-200 rounded-xl flex-row items-center px-4">
                                         <TextInput
-                                            style={
-                                                styles.passwordInput
-                                            }
+                                            className="flex-1 py-3.5 text-sm text-gray-900"
                                             placeholder="Enter your password"
-                                            placeholderTextColor="#999"
-                                            secureTextEntry={
-                                                !showPassword
-                                            }
+                                            placeholderTextColor="#9CA3AF"
+                                            secureTextEntry={!showPassword}
                                             textContentType="password"
                                             autoComplete="password"
                                             value={password}
                                             editable={!loading}
-                                            onChangeText={(
-                                                value
-                                            ) => {
-                                                setPassword(
-                                                    value
-                                                );
-
-                                                if (error) {
-                                                    setError("");
-                                                }
+                                            onChangeText={(value) => {
+                                                setPassword(value);
+                                                if (error) setError("");
                                             }}
                                         />
-
                                         <TouchableOpacity
-                                            onPress={() =>
-                                                setShowPassword(
-                                                    (prev) =>
-                                                        !prev
-                                                )
-                                            }
-                                            style={
-                                                styles.eyeButton
-                                            }
-                                            hitSlop={10}
+                                            onPress={() => setShowPassword((prev) => !prev)}
+                                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                                             disabled={loading}
                                         >
                                             <Ionicons
-                                                name={
-                                                    showPassword
-                                                        ? "eye-off-outline"
-                                                        : "eye-outline"
-                                                }
-                                                size={21}
-                                                color="#777"
+                                                name={showPassword ? "eye-off-outline" : "eye-outline"}
+                                                size={20}
+                                                color="#6B7280"
                                             />
                                         </TouchableOpacity>
                                     </View>
                                 </View>
 
-                                {/* Forgot password */}
+                                {/* Forgot Password */}
                                 <TouchableOpacity
-                                    onPress={() =>
-                                        router.push(
-                                            "/forgot-password"
-                                        )
-                                    }
-                                    style={
-                                        styles.forgotButton
-                                    }
+                                    onPress={() => router.push("/forgot-password" as never)}
+                                    className="self-end my-3"
                                     disabled={loading}
                                 >
-                                    <Text
-                                        style={
-                                            styles.forgotText
-                                        }
-                                    >
+                                    <Text className="text-xs font-semibold text-gray-600">
                                         Forgot password?
                                     </Text>
                                 </TouchableOpacity>
 
-                                {/* Sign In */}
-                                <Pressable
+                                {/* Sign In Button */}
+                                <TouchableOpacity
                                     onPress={onSignInPress}
-                                    disabled={
-                                        loading ||
-                                        !emailAddress.trim() ||
-                                        !password
-                                    }
-                                    style={({ pressed }) => [
-                                        styles.primaryButton,
-                                        (loading ||
-                                            !emailAddress.trim() ||
-                                            !password) &&
-                                            styles.disabledButton,
-                                        pressed &&
-                                            !loading &&
-                                            styles.pressed,
-                                    ]}
+                                    disabled={loading || !emailAddress.trim() || !password}
+                                    activeOpacity={0.85}
+                                    className={`w-full py-4 rounded-2xl items-center justify-center mt-2 shadow-sm ${
+                                        loading || !emailAddress.trim() || !password
+                                            ? "bg-gray-300"
+                                            : "bg-black"
+                                    }`}
                                 >
                                     {loading ? (
-                                        <ActivityIndicator
-                                            color="#FFFFFF"
-                                        />
+                                        <ActivityIndicator color="#FFFFFF" size="small" />
                                     ) : (
-                                        <Text
-                                            style={
-                                                styles.primaryButtonText
-                                            }
-                                        >
+                                        <Text className="text-white font-bold text-base">
                                             Sign In
                                         </Text>
                                     )}
-                                </Pressable>
+                                </TouchableOpacity>
 
-                                {/* Signup */}
-                                <View
-                                    style={
-                                        styles.signupContainer
-                                    }
-                                >
-                                    <Text
-                                        style={
-                                            styles.signupNormal
-                                        }
-                                    >
+                                {/* Sign Up Link */}
+                                <View className="flex-row justify-center items-center mt-6">
+                                    <Text className="text-xs text-gray-500">
                                         Don't have an account?{" "}
                                     </Text>
-
                                     <Link href="/sign-up">
-                                        <Text
-                                            style={
-                                                styles.signupLink
-                                            }
-                                        >
+                                        <Text className="text-xs font-bold text-black underline">
                                             Sign up
                                         </Text>
                                     </Link>
                                 </View>
                             </View>
                         ) : (
-                            <View
-                                style={styles.formContainer}
-                            >
-                                {/* Verification */}
-                                <View style={styles.header}>
-                                    <View
-                                        style={
-                                            styles.logoCircle
-                                        }
-                                    >
-                                        <Ionicons
-                                            name="shield-checkmark-outline"
-                                            size={28}
-                                            color={
-                                                COLORS.primary
-                                            }
-                                        />
+                            /* Verification Code Screen */
+                            <View className="w-full">
+                                <View className="items-center mb-8">
+                                    <View className="w-16 h-16 rounded-2xl bg-gray-100 items-center justify-center mb-4">
+                                        <Ionicons name="shield-checkmark-outline" size={30} color="#111111" />
                                     </View>
-
-                                    <Text
-                                        style={styles.title}
-                                    >
+                                    <Text className="text-2xl font-bold text-gray-900">
                                         Verify Email
                                     </Text>
-
-                                    <Text
-                                        style={
-                                            styles.subtitle
-                                        }
-                                    >
-                                        Enter the 6-digit code sent
-                                        to{" "}
-                                        {emailAddress}
+                                    <Text className="text-sm text-gray-500 mt-1 text-center">
+                                        Enter the 6-digit code sent to{" "}
+                                        <Text className="font-semibold text-gray-800">{emailAddress}</Text>
                                     </Text>
                                 </View>
 
-                                {/* Error */}
                                 {error ? (
-                                    <View
-                                        style={
-                                            styles.errorContainer
-                                        }
-                                    >
-                                        <Ionicons
-                                            name="alert-circle-outline"
-                                            size={19}
-                                            color={COLORS.error}
-                                        />
-
-                                        <Text
-                                            style={
-                                                styles.errorText
-                                            }
-                                        >
+                                    <View className="bg-red-50 border border-red-200 rounded-xl p-3 flex-row items-center mb-5">
+                                        <Ionicons name="alert-circle-outline" size={20} color="#DC2626" />
+                                        <Text className="text-red-700 text-xs font-medium ml-2 flex-1">
                                             {error}
                                         </Text>
                                     </View>
                                 ) : null}
 
-                                {/* Code */}
-                                <View style={styles.field}>
-                                    <Text style={styles.label}>
+                                <View className="mb-6">
+                                    <Text className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                                         Verification Code
                                     </Text>
-
                                     <TextInput
-                                        style={[
-                                            styles.input,
-                                            styles.codeInput,
-                                        ]}
+                                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-4 text-center text-xl font-bold tracking-widest text-gray-900"
                                         placeholder="123456"
-                                        placeholderTextColor="#999"
+                                        placeholderTextColor="#9CA3AF"
                                         keyboardType="number-pad"
                                         textContentType="oneTimeCode"
                                         autoComplete="one-time-code"
@@ -636,72 +394,40 @@ export default function Page() {
                                         value={code}
                                         editable={!loading}
                                         onChangeText={(value) => {
-                                            setCode(
-                                                value.replace(
-                                                    /[^0-9]/g,
-                                                    ""
-                                                )
-                                            );
-
-                                            if (error) {
-                                                setError("");
-                                            }
+                                            setCode(value.replace(/[^0-9]/g, ""));
+                                            if (error) setError("");
                                         }}
                                     />
                                 </View>
 
-                                {/* Verify */}
-                                <Pressable
+                                <TouchableOpacity
                                     onPress={onVerifyPress}
-                                    disabled={
-                                        loading ||
-                                        code.length !== 6
-                                    }
-                                    style={({ pressed }) => [
-                                        styles.primaryButton,
-                                        (loading ||
-                                            code.length !==
-                                                6) &&
-                                            styles.disabledButton,
-                                        pressed &&
-                                            !loading &&
-                                            styles.pressed,
-                                    ]}
+                                    disabled={loading || code.length !== 6}
+                                    activeOpacity={0.85}
+                                    className={`w-full py-4 rounded-2xl items-center justify-center shadow-sm ${
+                                        loading || code.length !== 6 ? "bg-gray-300" : "bg-black"
+                                    }`}
                                 >
                                     {loading ? (
-                                        <ActivityIndicator
-                                            color="#FFFFFF"
-                                        />
+                                        <ActivityIndicator color="#FFFFFF" size="small" />
                                     ) : (
-                                        <Text
-                                            style={
-                                                styles.primaryButtonText
-                                            }
-                                        >
+                                        <Text className="text-white font-bold text-base">
                                             Verify
                                         </Text>
                                     )}
-                                </Pressable>
+                                </TouchableOpacity>
 
                                 <TouchableOpacity
                                     onPress={() => {
-                                        setShowEmailCode(
-                                            false
-                                        );
+                                        setShowEmailCode(false);
                                         setCode("");
                                         setError("");
                                     }}
-                                    style={
-                                        styles.backToSignIn
-                                    }
+                                    className="items-center mt-6"
                                     disabled={loading}
                                 >
-                                    <Text
-                                        style={
-                                            styles.backToSignInText
-                                        }
-                                    >
-                                        Back to sign in
+                                    <Text className="text-xs font-semibold text-gray-600">
+                                        ← Back to Sign In
                                     </Text>
                                 </TouchableOpacity>
                             </View>
@@ -712,275 +438,3 @@ export default function Page() {
         </SafeAreaView>
     );
 }
-
-const styles = StyleSheet.create({
-    safeArea: {
-        flex: 1,
-        backgroundColor: "#FFFFFF",
-    },
-
-    keyboard: {
-        flex: 1,
-    },
-
-    scroll: {
-        flex: 1,
-    },
-
-    /*
-     * flexGrow + justifyContent center is the important
-     * part here.
-     *
-     * It keeps the auth form vertically centered on large
-     * screens, while still allowing it to scroll on smaller
-     * screens when the keyboard appears.
-     */
-    scrollContent: {
-        flexGrow: 1,
-        justifyContent: "center",
-        paddingVertical: 32,
-    },
-
-    container: {
-        width: "100%",
-        maxWidth: 430,
-        alignSelf: "center",
-        paddingHorizontal: 28,
-        position: "relative",
-    },
-
-    backButton: {
-        position: "absolute",
-        left: 28,
-        top: -4,
-        zIndex: 10,
-        width: 42,
-        height: 42,
-        borderRadius: 21,
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: "#F7F7F7",
-    },
-
-    formContainer: {
-        width: "100%",
-        paddingTop: 45,
-    },
-
-    header: {
-        alignItems: "center",
-        marginBottom: 28,
-    },
-
-    logoCircle: {
-        width: 62,
-        height: 62,
-        borderRadius: 31,
-        backgroundColor: "#F4F4F6",
-        alignItems: "center",
-        justifyContent: "center",
-        marginBottom: 17,
-    },
-
-    title: {
-        fontSize: 27,
-        lineHeight: 33,
-        fontWeight: "700",
-        color: "#111111",
-        textAlign: "center",
-        marginBottom: 7,
-    },
-
-    subtitle: {
-        fontSize: 13,
-        lineHeight: 19,
-        color: "#777777",
-        textAlign: "center",
-        maxWidth: 310,
-    },
-
-    errorContainer: {
-        width: "100%",
-        flexDirection: "row",
-        alignItems: "center",
-        backgroundColor: "#FFF5F5",
-        borderWidth: 1,
-        borderColor: "#FFE1E1",
-        borderRadius: 12,
-        paddingHorizontal: 13,
-        paddingVertical: 11,
-        marginBottom: 16,
-    },
-
-    errorText: {
-        flex: 1,
-        marginLeft: 8,
-        color: "#D44747",
-        fontSize: 12,
-        lineHeight: 17,
-    },
-
-    googleButton: {
-        width: "100%",
-        height: 50,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: "#E2E2E2",
-        backgroundColor: "#FFFFFF",
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        marginBottom: 21,
-    },
-
-    googleButtonText: {
-        marginLeft: 10,
-        color: "#222222",
-        fontSize: 14,
-        fontWeight: "600",
-    },
-
-    dividerContainer: {
-        width: "100%",
-        flexDirection: "row",
-        alignItems: "center",
-        marginBottom: 22,
-    },
-
-    divider: {
-        flex: 1,
-        height: StyleSheet.hairlineWidth,
-        backgroundColor: "#E6E6E6",
-    },
-
-    dividerText: {
-        marginHorizontal: 14,
-        color: "#999999",
-        fontSize: 11,
-        fontWeight: "600",
-    },
-
-    field: {
-        width: "100%",
-        marginBottom: 17,
-    },
-
-    label: {
-        color: "#202020",
-        fontSize: 13,
-        fontWeight: "600",
-        marginBottom: 8,
-    },
-
-    input: {
-        width: "100%",
-        height: 52,
-        borderRadius: 12,
-        backgroundColor: "#F7F7F8",
-        paddingHorizontal: 15,
-        color: "#151515",
-        fontSize: 14,
-        borderWidth: 1,
-        borderColor: "#EEEEEF",
-    },
-
-    passwordContainer: {
-        width: "100%",
-        height: 52,
-        borderRadius: 12,
-        backgroundColor: "#F7F7F8",
-        borderWidth: 1,
-        borderColor: "#EEEEEF",
-        flexDirection: "row",
-        alignItems: "center",
-    },
-
-    passwordInput: {
-        flex: 1,
-        height: "100%",
-        paddingHorizontal: 15,
-        paddingRight: 8,
-        color: "#151515",
-        fontSize: 14,
-    },
-
-    eyeButton: {
-        width: 48,
-        height: 52,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-
-    forgotButton: {
-        alignSelf: "flex-end",
-        marginTop: -3,
-        marginBottom: 20,
-    },
-
-    forgotText: {
-        color: "#666666",
-        fontSize: 12,
-        fontWeight: "600",
-    },
-
-    primaryButton: {
-        width: "100%",
-        height: 52,
-        borderRadius: 26,
-        backgroundColor: COLORS.primary,
-        alignItems: "center",
-        justifyContent: "center",
-        marginBottom: 25,
-    },
-
-    primaryButtonText: {
-        color: "#FFFFFF",
-        fontSize: 15,
-        fontWeight: "700",
-    },
-
-    disabledButton: {
-        backgroundColor: "#CFCFD2",
-    },
-
-    pressed: {
-        opacity: 0.82,
-        transform: [{ scale: 0.99 }],
-    },
-
-    signupContainer: {
-        flexDirection: "row",
-        justifyContent: "center",
-        alignItems: "center",
-        marginBottom: 5,
-    },
-
-    signupNormal: {
-        color: "#777777",
-        fontSize: 13,
-    },
-
-    signupLink: {
-        color: COLORS.primary,
-        fontSize: 13,
-        fontWeight: "700",
-    },
-
-    codeInput: {
-        textAlign: "center",
-        fontSize: 21,
-        fontWeight: "600",
-        letterSpacing: 6,
-    },
-
-    backToSignIn: {
-        alignItems: "center",
-        paddingVertical: 10,
-    },
-
-    backToSignInText: {
-        color: "#777777",
-        fontSize: 13,
-        fontWeight: "600",
-    },
-});
