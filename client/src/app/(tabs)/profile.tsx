@@ -1,30 +1,18 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useState } from "react";
 import {
     ActivityIndicator,
     Alert,
     Image,
-    Pressable,
     ScrollView,
-    StyleSheet,
     Text,
+    TouchableOpacity,
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useClerk, useUser } from "@clerk/expo";
-
-const COLORS = {
-    background: "#F7F7F7",
-    white: "#FFFFFF",
-    black: "#111111",
-    text: "#181818",
-    secondary: "#707070",
-    muted: "#969696",
-    border: "#E8E8E8",
-    iconBackground: "#F1F1F3",
-    danger: "#B84E4E",
-};
+import { COLORS } from "@/constants";
 
 type MenuItem = {
     id: string;
@@ -76,88 +64,51 @@ export default function Profile() {
     const router = useRouter();
     const clerk = useClerk();
     const { isLoaded, isSignedIn, user } = useUser();
-
     const [isSigningOut, setIsSigningOut] = useState(false);
 
-    const fullName = useMemo(() => {
-        if (!user) {
-            return "Guest User";
-        }
-
-        return (
-            user.fullName ||
-            [user.firstName, user.lastName]
-                .filter(Boolean)
-                .join(" ") ||
-            user.username ||
-            "RenewX User"
-        );
-    }, [user]);
+    const fullName = user
+        ? user.fullName ||
+          [user.firstName, user.lastName].filter(Boolean).join(" ") ||
+          user.username ||
+          "RenewX User"
+        : "Guest User";
 
     const email = user?.primaryEmailAddress?.emailAddress ?? "";
 
-    const initials = useMemo(() => {
-        if (!user) {
-            return "G";
-        }
+    const initials = user
+        ? (
+              (user.firstName?.[0] || "") + (user.lastName?.[0] || "")
+          ).toUpperCase() ||
+          fullName
+              .split(" ")
+              .map((n) => n[0])
+              .join("")
+              .slice(0, 2)
+              .toUpperCase() ||
+          "U"
+        : "G";
 
-        const first = user.firstName?.[0] ?? "";
-        const last = user.lastName?.[0] ?? "";
+    const isAdmin =
+        user?.publicMetadata?.role === "admin" ||
+        email === "dhushyandhneduncheziyan4896@gmail.com";
 
-        const result = `${first}${last}`.toUpperCase();
-
-        if (result) {
-            return result;
-        }
-
-        return fullName
-            .split(" ")
-            .map((part) => part[0])
-            .join("")
-            .slice(0, 2)
-            .toUpperCase();
-    }, [user, fullName]);
-
-    const isAdmin = useMemo(() => {
-        const role = user?.publicMetadata?.role;
-
-        return (
-            typeof role === "string" &&
-            role.trim().toLowerCase() === "admin"
-        );
-    }, [user]);
-
-    const navigate = useCallback(
-        (route: string) => {
-            router.push(route as never);
-        },
-        [router]
-    );
-
-    const handleSignOut = useCallback(() => {
-        if (isSigningOut) {
-            return;
-        }
+    const handleSignOut = () => {
+        if (isSigningOut) return;
 
         Alert.alert(
             "Sign Out",
             "Are you sure you want to sign out of your account?",
             [
-                {
-                    text: "Cancel",
-                    style: "cancel",
-                },
+                { text: "Cancel", style: "cancel" },
                 {
                     text: "Sign Out",
                     style: "destructive",
                     onPress: async () => {
                         setIsSigningOut(true);
-
                         try {
                             await clerk.signOut();
                         } catch (error) {
                             console.error("Sign out failed:", error);
-
                             Alert.alert(
                                 "Sign Out Failed",
                                 "We couldn't sign you out. Please try again."
@@ -169,741 +120,194 @@ export default function Profile() {
                 },
             ]
         );
-    }, [clerk, isSigningOut]);
+    };
 
     if (!isLoaded) {
         return (
-            <SafeAreaView style={styles.safeArea} edges={["top"]}>
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="small" color={COLORS.black} />
-                </View>
+            <SafeAreaView className="flex-1 bg-[#F7F7F7] items-center justify-center" edges={["top"]}>
+                <ActivityIndicator size="small" color={COLORS.primary} />
             </SafeAreaView>
         );
     }
 
     return (
-        <SafeAreaView style={styles.safeArea} edges={["top"]}>
-            <View style={styles.screen}>
-                {/* =====================================================
-                    HEADER
-                ====================================================== */}
-                <View style={styles.header}>
-                    <Text style={styles.headerTitle}>Profile</Text>
-                </View>
+        <SafeAreaView className="flex-1 bg-[#F7F7F7]" edges={["top"]}>
+            {/* Top Bar Header */}
+            <View className="h-14 bg-white border-b border-gray-100 items-center justify-center">
+                <Text className="text-lg font-bold text-gray-900">Profile</Text>
+            </View>
 
-                <ScrollView
-                    style={styles.scroll}
-                    contentContainerStyle={styles.scrollContent}
-                    showsVerticalScrollIndicator={false}
-                    bounces
-                >
-                    <View style={styles.content}>
-                        {!isSignedIn ? (
-                            <>
-                                {/* =================================================
-                                    GUEST PROFILE
-                                ================================================== */}
-                                <View style={styles.guestHero}>
-                                    <View style={styles.guestAvatar}>
-                                        <Ionicons
-                                            name="person-outline"
-                                            size={44}
-                                            color="#4D4D54"
-                                        />
-                                    </View>
-
-                                    <Text style={styles.guestTitle}>
-                                        Welcome to RenewX
-                                    </Text>
-
-                                    <Text style={styles.guestSubtitle}>
-                                        Sign in to access your account, orders,
-                                        favorites and more.
-                                    </Text>
-
-                                    <View style={styles.authButtons}>
-                                        <Pressable
-                                            onPress={() => navigate("/sign-in")}
-                                            style={({ pressed }) => [
-                                                styles.signInButton,
-                                                pressed && styles.signInPressed,
-                                            ]}
-                                        >
-                                            <Text style={styles.signInButtonText}>
-                                                Sign In
-                                            </Text>
-
-                                            <Ionicons
-                                                name="arrow-forward"
-                                                size={19}
-                                                color="#FFFFFF"
-                                            />
-                                        </Pressable>
-
-                                        <Pressable
-                                            onPress={() => navigate("/sign-up")}
-                                            style={({ pressed }) => [
-                                                styles.createAccountButton,
-                                                pressed && styles.createAccountPressed,
-                                            ]}
-                                        >
-                                            <Text style={styles.createAccountText}>
-                                                Create Account
-                                            </Text>
-                                        </Pressable>
-                                    </View>
+            <ScrollView
+                className="flex-1"
+                contentContainerStyle={{ paddingBottom: 120 }}
+                showsVerticalScrollIndicator={false}
+            >
+                <View className="w-full max-w-lg self-center px-4 pt-5">
+                    {!isSignedIn ? (
+                        <>
+                            {/* GUEST WELCOME HERO */}
+                            <View className="items-center pt-2 pb-6">
+                                <View className="w-24 h-24 rounded-full bg-gray-200 items-center justify-center mb-4">
+                                    <Ionicons name="person-outline" size={44} color="#4D4D54" />
                                 </View>
 
-                                {/* =================================================
-                                    EXPLORE
-                                ================================================== */}
-                                <Text style={styles.sectionLabel}>
-                                    EXPLORE RENEWX
+                                <Text className="text-2xl font-bold text-gray-900 text-center">
+                                    Welcome to RenewX
                                 </Text>
 
-                                <View style={styles.menuCard}>
-                                    <ProfileMenuRow
-                                        title="Favorites"
-                                        subtitle="View your saved products"
-                                        icon="heart-outline"
-                                        onPress={() => navigate("/favorites")}
-                                    />
+                                <Text className="text-sm text-gray-500 text-center mt-2 px-6">
+                                    Sign in to access your account, orders, favorites and more.
+                                </Text>
+
+                                <View className="w-full mt-6 space-y-3">
+                                    <TouchableOpacity
+                                        onPress={() => router.push("/sign-in" as never)}
+                                        activeOpacity={0.85}
+                                        className="w-full h-13 py-3.5 px-6 rounded-2xl bg-black flex-row items-center justify-center shadow-sm"
+                                    >
+                                        <Text className="text-white font-bold text-base mr-2">
+                                            Sign In
+                                        </Text>
+                                        <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
+                                        onPress={() => router.push("/sign-up" as never)}
+                                        activeOpacity={0.85}
+                                        className="w-full h-13 py-3.5 px-6 rounded-2xl bg-white border border-gray-900 items-center justify-center mt-3"
+                                    >
+                                        <Text className="text-gray-900 font-bold text-base">
+                                            Create Account
+                                        </Text>
+                                    </TouchableOpacity>
                                 </View>
-                            </>
-                        ) : (
-                            <>
-                                {/* =================================================
-                                    PROFILE HERO
-                                ================================================== */}
-                                <View style={styles.profileHero}>
-                                    {user?.imageUrl ? (
-                                        <Image
-                                            source={{ uri: user.imageUrl }}
-                                            style={styles.profileImage}
-                                        />
-                                    ) : (
-                                        <View style={styles.profileAvatar}>
-                                            <Text style={styles.initials}>
-                                                {initials}
+                            </View>
+
+                            {/* EXPLORE SECTION */}
+                            <Text className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 px-1">
+                                Explore RenewX
+                            </Text>
+
+                            <View className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                                <TouchableOpacity
+                                    onPress={() => router.push("/favorites" as never)}
+                                    activeOpacity={0.7}
+                                    className="flex-row items-center px-4 py-3.5"
+                                >
+                                    <View className="w-11 h-11 rounded-xl bg-gray-100 items-center justify-center mr-3">
+                                        <Ionicons name="heart-outline" size={22} color="#111111" />
+                                    </View>
+                                    <View className="flex-1 mr-2">
+                                        <Text className="text-[15px] font-bold text-gray-900">
+                                            Favorites
+                                        </Text>
+                                        <Text className="text-xs text-gray-500 mt-0.5">
+                                            View your saved products
+                                        </Text>
+                                    </View>
+                                    <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                                </TouchableOpacity>
+                            </View>
+                        </>
+                    ) : (
+                        <>
+                            {/* LOGGED IN USER PROFILE HERO */}
+                            <View className="items-center pt-2 pb-6">
+                                {user?.imageUrl ? (
+                                    <Image
+                                        source={{ uri: user.imageUrl }}
+                                        className="w-24 h-24 rounded-full bg-gray-200 mb-3"
+                                    />
+                                ) : (
+                                    <View className="w-24 h-24 rounded-full bg-gray-200 items-center justify-center mb-3">
+                                        <Text className="text-2xl font-bold text-gray-700">
+                                            {initials}
+                                        </Text>
+                                    </View>
+                                )}
+
+                                <Text className="text-xl font-bold text-gray-900 text-center" numberOfLines={1}>
+                                    {fullName}
+                                </Text>
+
+                                {email ? (
+                                    <Text className="text-xs text-gray-500 text-center mt-1" numberOfLines={1}>
+                                        {email}
+                                    </Text>
+                                ) : null}
+
+                                {isAdmin && (
+                                    <TouchableOpacity
+                                        onPress={() => router.push("/admin" as never)}
+                                        activeOpacity={0.85}
+                                        className="mt-3 px-4 py-2 bg-gray-900 rounded-full flex-row items-center"
+                                    >
+                                        <Ionicons name="shield-checkmark-outline" size={16} color="#FFFFFF" />
+                                        <Text className="text-white text-xs font-bold mx-2">
+                                            Admin Panel
+                                        </Text>
+                                        <Ionicons name="arrow-forward" size={13} color="#FFFFFF" />
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+
+                            {/* ACCOUNT MENU SECTION */}
+                            <Text className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 px-1">
+                                Account
+                            </Text>
+
+                            <View className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                                {MENU_ITEMS.map((item, index) => (
+                                    <TouchableOpacity
+                                        key={item.id}
+                                        onPress={() => router.push(item.route as never)}
+                                        activeOpacity={0.7}
+                                        className={`flex-row items-center px-4 py-3.5 ${
+                                            index < MENU_ITEMS.length - 1 ? "border-b border-gray-100" : ""
+                                        }`}
+                                    >
+                                        <View className="w-11 h-11 rounded-xl bg-gray-100 items-center justify-center mr-3">
+                                            <Ionicons name={item.icon} size={20} color="#111111" />
+                                        </View>
+                                        <View className="flex-1 mr-2">
+                                            <Text className="text-[15px] font-bold text-gray-900">
+                                                {item.title}
+                                            </Text>
+                                            <Text className="text-xs text-gray-500 mt-0.5">
+                                                {item.subtitle}
                                             </Text>
                                         </View>
-                                    )}
+                                        <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
 
-                                    <Text
-                                        style={styles.userName}
-                                        numberOfLines={1}
-                                    >
-                                        {fullName}
-                                    </Text>
-
-                                    {email ? (
-                                        <Text
-                                            style={styles.userEmail}
-                                            numberOfLines={1}
-                                        >
-                                            {email}
+                            {/* SIGN OUT BUTTON */}
+                            <TouchableOpacity
+                                onPress={handleSignOut}
+                                disabled={isSigningOut}
+                                activeOpacity={0.8}
+                                className="w-full h-13 py-3.5 px-4 rounded-2xl bg-red-50 border border-red-100 flex-row items-center justify-center mt-4"
+                            >
+                                {isSigningOut ? (
+                                    <ActivityIndicator size="small" color="#DC2626" />
+                                ) : (
+                                    <>
+                                        <Ionicons name="log-out-outline" size={20} color="#DC2626" />
+                                        <Text className="text-red-600 font-bold text-sm ml-2">
+                                            Sign Out
                                         </Text>
-                                    ) : null}
+                                    </>
+                                )}
+                            </TouchableOpacity>
+                        </>
+                    )}
 
-                                    {isAdmin && (
-                                        <Pressable
-                                            onPress={() => navigate("/admin")}
-                                            style={({ pressed }) => [
-                                                styles.adminButton,
-                                                pressed && styles.buttonPressed,
-                                            ]}
-                                        >
-                                            <Ionicons
-                                                name="shield-checkmark-outline"
-                                                size={17}
-                                                color="#FFFFFF"
-                                            />
-
-                                            <Text style={styles.adminText}>
-                                                Admin Panel
-                                            </Text>
-
-                                            <Ionicons
-                                                name="arrow-forward"
-                                                size={14}
-                                                color="#FFFFFF"
-                                            />
-                                        </Pressable>
-                                    )}
-                                </View>
-
-                                {/* =================================================
-                                    ACCOUNT
-                                ================================================== */}
-                                <Text style={styles.sectionLabel}>
-                                    ACCOUNT
-                                </Text>
-
-                                <View style={styles.menuCard}>
-                                    {MENU_ITEMS.map((item, index) => (
-                                        <ProfileMenuRow
-                                            key={item.id}
-                                            title={item.title}
-                                            subtitle={item.subtitle}
-                                            icon={item.icon}
-                                            onPress={() => navigate(item.route)}
-                                            showDivider={
-                                                index < MENU_ITEMS.length - 1
-                                            }
-                                        />
-                                    ))}
-                                </View>
-
-                                {/* =================================================
-                                    SIGN OUT
-                                ================================================== */}
-                                <Pressable
-                                    onPress={handleSignOut}
-                                    disabled={isSigningOut}
-                                    style={({ pressed }) => [
-                                        styles.logoutButton,
-                                        pressed &&
-                                            !isSigningOut &&
-                                            styles.logoutPressed,
-                                    ]}
-                                >
-                                    {isSigningOut ? (
-                                        <ActivityIndicator
-                                            size="small"
-                                            color={COLORS.danger}
-                                        />
-                                    ) : (
-                                        <>
-                                            <Ionicons
-                                                name="log-out-outline"
-                                                size={20}
-                                                color={COLORS.danger}
-                                            />
-
-                                            <Text style={styles.logoutText}>
-                                                Sign Out
-                                            </Text>
-                                        </>
-                                    )}
-                                </Pressable>
-                            </>
-                        )}
-
-                        <Text style={styles.footer}>RenewX</Text>
-                    </View>
-                </ScrollView>
-            </View>
+                    <Text className="text-center text-xs text-gray-400 mt-8 mb-4">
+                        RenewX
+                    </Text>
+                </View>
+            </ScrollView>
         </SafeAreaView>
     );
 }
-
-/* ================================================================
-   PROFILE MENU ROW
-================================================================ */
-
-function ProfileMenuRow({
-    title,
-    subtitle,
-    icon,
-    onPress,
-    showDivider = false,
-}: {
-    title: string;
-    subtitle: string;
-    icon: keyof typeof Ionicons.glyphMap;
-    onPress: () => void;
-    showDivider?: boolean;
-}) {
-    return (
-        <Pressable
-            onPress={onPress}
-            style={({ pressed }) => [
-                styles.menuRow,
-                showDivider && styles.menuRowDivider,
-                pressed && styles.menuRowPressed,
-            ]}
-        >
-            {/* ICON */}
-            <View style={styles.menuIconWrapper}>
-                <View style={styles.menuIconBox}>
-                    <Ionicons name={icon} size={21} color={COLORS.black} />
-                </View>
-            </View>
-
-            {/* TEXT */}
-            <View style={styles.menuTextWrapper}>
-                <Text style={styles.menuTitle} numberOfLines={1}>
-                    {title}
-                </Text>
-
-                <Text style={styles.menuSubtitle} numberOfLines={1}>
-                    {subtitle}
-                </Text>
-            </View>
-
-            {/* CHEVRON */}
-            <View style={styles.menuChevron}>
-                <Ionicons
-                    name="chevron-forward"
-                    size={20}
-                    color="#A0A0A0"
-                />
-            </View>
-        </Pressable>
-    );
-}
-
-/* ================================================================
-   STYLES
-================================================================ */
-
-const styles = StyleSheet.create({
-    safeArea: {
-        flex: 1,
-        backgroundColor: COLORS.background,
-    },
-
-    screen: {
-        flex: 1,
-        backgroundColor: COLORS.background,
-    },
-
-    loadingContainer: {
-        flex: 1,
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: COLORS.background,
-    },
-
-    /* ============================================================
-       HEADER
-    ============================================================ */
-
-    header: {
-        height: 58,
-        backgroundColor: COLORS.white,
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: COLORS.border,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: "700",
-        color: COLORS.text,
-    },
-
-    /* ============================================================
-       SCROLL
-    ============================================================ */
-
-    scroll: {
-        flex: 1,
-    },
-
-    scrollContent: {
-        flexGrow: 1,
-        paddingBottom: 110,
-    },
-
-    content: {
-        width: "100%",
-        maxWidth: 560,
-        alignSelf: "center",
-        paddingHorizontal: 18,
-        paddingTop: 22,
-    },
-
-    /* ============================================================
-       GUEST
-    ============================================================ */
-
-    guestHero: {
-        width: "100%",
-        alignItems: "center",
-        paddingTop: 10,
-        paddingBottom: 32,
-    },
-
-    guestAvatar: {
-        width: 104,
-        height: 104,
-        borderRadius: 52,
-        backgroundColor: "#EDEDEF",
-        alignItems: "center",
-        justifyContent: "center",
-        marginBottom: 20,
-    },
-
-    guestTitle: {
-        fontSize: 25,
-        lineHeight: 32,
-        fontWeight: "700",
-        color: COLORS.text,
-        textAlign: "center",
-    },
-
-    guestSubtitle: {
-        width: "100%",
-        maxWidth: 390,
-        marginTop: 9,
-        fontSize: 14,
-        lineHeight: 21,
-        color: COLORS.secondary,
-        textAlign: "center",
-    },
-
-    /* ============================================================
-       AUTH
-    ============================================================ */
-
-    authButtons: {
-        width: "100%",
-        maxWidth: 390,
-        marginTop: 25,
-    },
-
-    signInButton: {
-        width: "100%",
-        height: 54,
-        borderRadius: 15,
-        backgroundColor: COLORS.black,
-        borderWidth: 1,
-        borderColor: COLORS.black,
-
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-
-        gap: 9,
-
-        shadowColor: "#000000",
-        shadowOffset: {
-            width: 0,
-            height: 3,
-        },
-        shadowOpacity: 0.15,
-        shadowRadius: 6,
-        elevation: 4,
-    },
-
-    signInButtonText: {
-        color: "#FFFFFF",
-        fontSize: 16,
-        fontWeight: "700",
-    },
-
-    signInPressed: {
-        backgroundColor: "#303030",
-    },
-
-    createAccountButton: {
-        width: "100%",
-        height: 54,
-        marginTop: 11,
-        borderRadius: 15,
-
-        backgroundColor: "#FFFFFF",
-
-        borderWidth: 1.5,
-        borderColor: COLORS.black,
-
-        alignItems: "center",
-        justifyContent: "center",
-    },
-
-    createAccountText: {
-        color: COLORS.black,
-        fontSize: 15,
-        fontWeight: "700",
-    },
-
-    createAccountPressed: {
-        backgroundColor: "#F0F0F0",
-    },
-
-    /* ============================================================
-       SECTION
-    ============================================================ */
-
-    sectionLabel: {
-        marginBottom: 9,
-        paddingHorizontal: 2,
-
-        fontSize: 12,
-        fontWeight: "800",
-        letterSpacing: 0.8,
-
-        color: "#777777",
-    },
-
-    /* ============================================================
-       MENU CARD
-    ============================================================ */
-
-    menuCard: {
-        width: "100%",
-        backgroundColor: COLORS.white,
-
-        borderRadius: 18,
-        borderWidth: 1,
-        borderColor: COLORS.border,
-
-        overflow: "hidden",
-    },
-
-    /* ============================================================
-       MENU ROW
-    ============================================================ */
-
-    menuRow: {
-        width: "100%",
-        minHeight: 78,
-
-        paddingLeft: 14,
-        paddingRight: 12,
-        paddingVertical: 10,
-
-        flexDirection: "row",
-        alignItems: "center",
-
-        backgroundColor: COLORS.white,
-    },
-
-    menuRowDivider: {
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: COLORS.border,
-    },
-
-    menuRowPressed: {
-        backgroundColor: "#F8F8F8",
-    },
-
-    /* ============================================================
-       MENU ICON
-    ============================================================ */
-
-    menuIconWrapper: {
-        width: 50,
-        height: 50,
-
-        flexShrink: 0,
-
-        alignItems: "center",
-        justifyContent: "center",
-    },
-
-    menuIconBox: {
-        width: 46,
-        height: 46,
-        borderRadius: 14,
-
-        backgroundColor: COLORS.iconBackground,
-
-        alignItems: "center",
-        justifyContent: "center",
-    },
-
-    /* ============================================================
-       MENU TEXT
-    ============================================================ */
-
-    menuTextWrapper: {
-        flex: 1,
-
-        minWidth: 0,
-
-        marginLeft: 13,
-        marginRight: 8,
-
-        justifyContent: "center",
-    },
-
-    menuTitle: {
-        width: "100%",
-
-        fontSize: 15,
-        lineHeight: 20,
-        fontWeight: "700",
-
-        color: COLORS.text,
-    },
-
-    menuSubtitle: {
-        width: "100%",
-
-        marginTop: 4,
-
-        fontSize: 12,
-        lineHeight: 17,
-
-        color: "#929298",
-    },
-
-    /* ============================================================
-       CHEVRON
-    ============================================================ */
-
-    menuChevron: {
-        width: 28,
-        height: 50,
-
-        flexShrink: 0,
-
-        alignItems: "center",
-        justifyContent: "center",
-    },
-
-    /* ============================================================
-       SIGNED-IN PROFILE
-    ============================================================ */
-
-    profileHero: {
-        width: "100%",
-
-        alignItems: "center",
-
-        paddingTop: 4,
-        paddingBottom: 22,
-    },
-
-    profileImage: {
-        width: 94,
-        height: 94,
-        borderRadius: 47,
-
-        backgroundColor: COLORS.iconBackground,
-
-        marginBottom: 14,
-    },
-
-    profileAvatar: {
-        width: 94,
-        height: 94,
-        borderRadius: 47,
-
-        backgroundColor: "#E8E8EC",
-
-        alignItems: "center",
-        justifyContent: "center",
-
-        marginBottom: 14,
-    },
-
-    initials: {
-        fontSize: 30,
-        fontWeight: "700",
-        color: "#45454C",
-    },
-
-    userName: {
-        maxWidth: "92%",
-
-        fontSize: 22,
-        lineHeight: 28,
-
-        fontWeight: "700",
-
-        color: COLORS.text,
-
-        textAlign: "center",
-    },
-
-    userEmail: {
-        maxWidth: "92%",
-
-        marginTop: 5,
-
-        fontSize: 13,
-        lineHeight: 18,
-
-        color: "#85858B",
-
-        textAlign: "center",
-    },
-
-    /* ============================================================
-       ADMIN
-    ============================================================ */
-
-    adminButton: {
-        minHeight: 40,
-
-        marginTop: 13,
-        paddingHorizontal: 17,
-
-        borderRadius: 20,
-
-        backgroundColor: COLORS.black,
-
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-
-        gap: 7,
-    },
-
-    adminText: {
-        color: COLORS.white,
-        fontSize: 12,
-        fontWeight: "700",
-    },
-
-    /* ============================================================
-       LOGOUT
-    ============================================================ */
-
-    logoutButton: {
-        width: "100%",
-        height: 52,
-
-        marginTop: 16,
-
-        borderRadius: 15,
-
-        backgroundColor: "#FFF7F7",
-
-        borderWidth: 1,
-        borderColor: "#F2DEDE",
-
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-
-        gap: 8,
-    },
-
-    logoutText: {
-        color: COLORS.danger,
-        fontSize: 14,
-        fontWeight: "700",
-    },
-
-    logoutPressed: {
-        opacity: 0.7,
-    },
-
-    buttonPressed: {
-        opacity: 0.82,
-        transform: [
-            {
-                scale: 0.99,
-            },
-        ],
-    },
-
-    /* ============================================================
-       FOOTER
-    ============================================================ */
-
-    footer: {
-        marginTop: 27,
-
-        textAlign: "center",
-
-        color: "#B0B0B4",
-
-        fontSize: 11,
-    },
-});

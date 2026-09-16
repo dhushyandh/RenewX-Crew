@@ -7,7 +7,7 @@ const productSchema = new Schema<IProduct>({
     price: { type: Number, required: true, min: 0 },
     images: { type: [String] },
     sizes: [{ type: String, required: true }],
-    category: { type: String, required: true, enum: ['Men', 'Women', 'Kids', 'Shoes', 'Bags', 'Other'], default: 'Other' },
+    category: { type: String, required: true, enum: ['Men', 'Women', 'Kids', 'Shoes', 'Bags', 'Bag', 'Other'], default: 'Other' },
     stock: { type: Number, required: true, default: 0, min: 0 },
     isFeatured: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
