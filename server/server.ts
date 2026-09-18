@@ -17,7 +17,6 @@ import paymentRoutes from "./routes/paymentRoutes.js";
 import { razorpayWebhook } from "./controllers/paymentWebhook.js";
 
 const app = express();
-await connectDB();
 
 // Fail fast during startup if the database is unavailable. This prevents the
 // API from accepting requests while MongoDB is disconnected.
