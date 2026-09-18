@@ -15,7 +15,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { Product } from "@/constants/types";
 import { COLORS } from "@/constants";
-import { dummyProducts } from "@/assets/assets";
 import { useCart } from "../../../context/CartContext";
 import { useWishList } from "../../../context/WishListContext";
 import Toast from "react-native-toast-message";
@@ -50,15 +49,12 @@ export default function ProductDetails() {
                     return;
                 }
             } catch (err) {
-                console.log("Could not fetch product from backend, checking dummy fallback:", err);
+                console.warn("Could not fetch product from backend:", err);
             }
 
-            const foundProduct =
-                dummyProducts.find((item) => item._id === id) ?? null;
-
             if (isMounted) {
-                setProduct(foundProduct as Product | null);
-                setSelectedSize(foundProduct?.sizes?.[0] || "");
+                setProduct(null);
+                setSelectedSize("");
                 setActiveImageIndex(0);
                 setLoading(false);
             }
@@ -286,7 +282,7 @@ export default function ProductDetails() {
 
                     {/* PRICE */}
                     <Text className="mt-2 text-2xl font-bold text-gray-900">
-                        ${product.price.toFixed(2)}
+                        ₹${product.price.toFixed(2)}
                     </Text>
 
                     {/* SIZE */}
