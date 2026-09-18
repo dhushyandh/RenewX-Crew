@@ -1,3 +1,7 @@
+import { useAuth } from "@clerk/expo";
+
+import api, { getAuthHeaders } from "@/constants/api";
+
 import {
     createContext,
     useContext,
@@ -6,8 +10,6 @@ import {
 } from "react";
 
 import { Product } from "@/constants/types";
-import { dummyCart } from "@/assets/assets";
-
 import { useAppRefresh } from "./RefreshContext";
 
 export type CartItem = {
@@ -69,48 +71,49 @@ export function CartProvider({
     const [isLoading, setIsLoading] =
         useState(false);
 
+    const { isSignedIn, getToken } = useAuth();
+
     const { registerRefreshHandler } =
         useAppRefresh();
 
     const fetchCart = async () => {
+        if (!isSignedIn) {
+            setCartItems([]);
+            setCartTotal(0);
+            setIsLoading(false);
+            return;
+        }
+
         setIsLoading(true);
-
         try {
-            /*
-             * TODO:
-             * Replace dummyCart with your real
-             * cart API when backend is connected.
-             */
+            const authConfig = await getAuthHeaders(getToken);
+            const response = await api.get("/cart", authConfig);
+            const serverCart = response.data?.data;
 
-            const serverCart = dummyCart;
+            if (!response.data?.success || !serverCart) {
+                throw new Error("Invalid cart response");
+            }
 
-            const mappedItems: CartItem[] =
-                serverCart.items.map(
-                    (item: any) => ({
-                        id: item.product._id,
-                        product: item.product,
-                        productId: item.productId,
-                        userId: item.userId,
-                        quantity: item.quantity,
-                        size: item.size,
-                        price: item.product.price,
-                        createdAt:
-                            item.createdAt,
-                        updatedAt:
-                            item.updatedAt,
-                    }),
-                );
+            const mappedItems: CartItem[] = (Array.isArray(serverCart.items) ? serverCart.items : [])
+                .filter((item: any) => item?.product?._id)
+                .map((item: any) => ({
+                    id: String(item._id),
+                    product: item.product,
+                    productId: String(item.product._id),
+                    userId: String(serverCart.user ?? ""),
+                    quantity: item.quantity,
+                    size: item.size ?? "",
+                    price: Number(item.price ?? item.product.price ?? 0),
+                    createdAt: item.createdAt ?? serverCart.createdAt ?? new Date().toISOString(),
+                    updatedAt: item.updatedAt ?? serverCart.updatedAt ?? new Date().toISOString(),
+                }));
 
             setCartItems(mappedItems);
-
-            setCartTotal(
-                serverCart.totalAmount,
-            );
+            setCartTotal(Number(serverCart.totalAmount ?? 0));
         } catch (error) {
-            console.error(
-                "Failed to fetch cart:",
-                error,
-            );
+            console.error("Failed to fetch cart:", error);
+            setCartItems([]);
+            setCartTotal(0);
         } finally {
             setIsLoading(false);
         }
@@ -136,51 +139,25 @@ export function CartProvider({
         product: Product,
         size: string,
     ) => {
+        if (!isSignedIn) throw new Error("Authentication required");
+        if (!product?._id || !size?.trim()) throw new Error("Product and size are required");
+
         setIsLoading(true);
-
         try {
-            const existingItem =
-                cartItems.find(
-                    (item) =>
-                        item.productId ===
-                            product._id &&
-                        item.size === size,
-                );
+            const authConfig = await getAuthHeaders(getToken);
+            const response = await api.post("/cart/add", {
+                productId: product._id,
+                quantity: 1,
+                size: size.trim(),
+            }, authConfig);
 
-            if (existingItem) {
-                setCartItems((previous) =>
-                    previous.map((item) =>
-                        item.id ===
-                        existingItem.id
-                            ? {
-                                  ...item,
-                                  quantity:
-                                      item.quantity +
-                                      1,
-                              }
-                            : item,
-                    ),
-                );
-            } else {
-                const newItem: CartItem = {
-                    id: `${product._id}-${size}`,
-                    product,
-                    productId: product._id,
-                    userId: "local-user",
-                    quantity: 1,
-                    size,
-                    price: product.price,
-                    createdAt:
-                        new Date().toISOString(),
-                    updatedAt:
-                        new Date().toISOString(),
-                };
-
-                setCartItems((previous) => [
-                    ...previous,
-                    newItem,
-                ]);
+            if (!response.data?.success) {
+                throw new Error(response.data?.message || "Failed to add item to cart");
             }
+            await fetchCart();
+        } catch (error) {
+            console.error("Failed to add item to cart:", error);
+            throw error;
         } finally {
             setIsLoading(false);
         }
@@ -190,16 +167,24 @@ export function CartProvider({
         productId: string,
         size: string,
     ) => {
-        setCartItems((previous) =>
-            previous.filter(
-                (item) =>
-                    !(
-                        item.productId ===
-                            productId &&
-                        item.size === size
-                    ),
-            ),
-        );
+        if (!isSignedIn) throw new Error("Authentication required");
+        setIsLoading(true);
+        try {
+            const authConfig = await getAuthHeaders(getToken);
+            const response = await api.delete(
+                `/cart/remove/${productId}?size=${encodeURIComponent(size)}`,
+                authConfig,
+            );
+            if (!response.data?.success) {
+                throw new Error(response.data?.message || "Failed to remove item");
+            }
+            await fetchCart();
+        } catch (error) {
+            console.error("Failed to remove cart item:", error);
+            throw error;
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const updateQuantity = async (
@@ -207,32 +192,53 @@ export function CartProvider({
         size: string,
         quantity: number,
     ) => {
-        if (quantity <= 0) {
-            await removeFromCart(
-                productId,
-                size,
-            );
-            return;
+        if (!isSignedIn) throw new Error("Authentication required");
+        if (!Number.isInteger(quantity) || quantity < 0 || quantity > 100) {
+            throw new Error("Quantity must be an integer between 0 and 100");
         }
 
-        setCartItems((previous) =>
-            previous.map((item) =>
-                item.productId === productId &&
-                item.size === size
-                    ? {
-                          ...item,
-                          quantity,
-                          updatedAt:
-                              new Date().toISOString(),
-                      }
-                    : item,
-            ),
-        );
+        setIsLoading(true);
+        try {
+            const authConfig = await getAuthHeaders(getToken);
+            const response = await api.put(
+                `/cart/update/${productId}`,
+                { quantity, size },
+                authConfig,
+            );
+            if (!response.data?.success) {
+                throw new Error(response.data?.message || "Failed to update cart item");
+            }
+            await fetchCart();
+        } catch (error) {
+            console.error("Failed to update cart item:", error);
+            throw error;
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const clearCart = async () => {
-        setCartItems([]);
-        setCartTotal(0);
+        if (!isSignedIn) {
+            setCartItems([]);
+            setCartTotal(0);
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            const authConfig = await getAuthHeaders(getToken);
+            const response = await api.delete("/cart", authConfig);
+            if (!response.data?.success) {
+                throw new Error(response.data?.message || "Failed to clear cart");
+            }
+            setCartItems([]);
+            setCartTotal(0);
+        } catch (error) {
+            console.error("Failed to clear cart:", error);
+            throw error;
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const itemCount = cartItems.reduce(
@@ -240,19 +246,6 @@ export function CartProvider({
             sum + item.quantity,
         0,
     );
-
-    const calculatedTotal =
-        cartItems.reduce(
-            (sum, item) =>
-                sum +
-                item.product.price *
-                    item.quantity,
-            0,
-        );
-
-    useEffect(() => {
-        setCartTotal(calculatedTotal);
-    }, [calculatedTotal]);
 
     return (
         <CartContext.Provider
