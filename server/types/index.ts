@@ -48,7 +48,7 @@ export interface IOrder extends Document {
         country: string;
     };
     paymentMethod: "cash" | "stripe";
-    paymentStatus: "pending" | "paid" | "failed" | "refunded";
+    paymentStatus: "pending" | "completed" | "cancelled";
     paymentIntentId?: string;
     orderStatus: "placed" | "processing" | "shipped" | "delivered" | "cancelled";
     subtotal: number;
