@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import Product from "../models/Products.js";
-import axios from "axios";
+import { put, del } from "@vercel/blob";
 
 // Get all products -> Get /api/products?page=1&limit=10
 export const getProducts = async (req: Request, res: Response) => {
@@ -73,58 +73,27 @@ export const getProduct = async (req: Request, res: Response) => {
         })
     }
 }
-const VERCEL_BLOB_API = "https://blob.vercel-storage.com";
-const VERCEL_BLOB_API_VERSION = "7";
-
-const getBlobToken = () => {
-    const token = process.env.BLOB_READ_WRITE_TOKEN;
-    if (!token) {
-        const error: any = new Error("BLOB_READ_WRITE_TOKEN is not configured");
-        error.code = "BLOB_NOT_CONFIGURED";
-        throw error;
-    }
-    return token;
-};
-
 const sanitizeFileName = (name: string) =>
     name.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/-+/g, "-").slice(0, 80) || "image";
 
-// Store product images in Vercel Blob. MongoDB stores only the returned URL.
+// Vercel Blob uses the project OIDC credential on Vercel. The Vercel CLI
+// provides the same short-lived credential locally as VERCEL_OIDC_TOKEN.
 const uploadImageToBlob = async (file: any): Promise<string> => {
-    const token = getBlobToken();
     const fileName = sanitizeFileName(file.originalname || "image");
     const pathname = "products/" + Date.now() + "-" + Math.random().toString(36).slice(2, 10) + "-" + fileName;
 
     try {
-        const response = await axios.put(VERCEL_BLOB_API + "/" + pathname, file.buffer, {
-            timeout: 30000,
-            maxBodyLength: Infinity,
-            headers: {
-                authorization: "Bearer " + token,
-                "x-api-version": VERCEL_BLOB_API_VERSION,
-                "x-content-type": file.mimetype || "application/octet-stream",
-                access: "public",
-                "x-add-random-suffix": "0",
-                "x-cache-control-max-age": "31536000",
-            },
+        const blob = await put(pathname, file.buffer, {
+            access: "public",
+            addRandomSuffix: false,
+            contentType: file.mimetype || "application/octet-stream",
+            cacheControlMaxAge: 31536000,
         });
-
-        const url = response.data?.url;
-        if (!url || typeof url !== "string") {
-            const error: any = new Error("Vercel Blob upload completed without a URL");
-            error.code = "BLOB_INVALID_RESPONSE";
-            throw error;
-        }
-        return url;
+        return blob.url;
     } catch (error: any) {
-        const normalized: any = new Error(
-            error?.response?.data?.error?.message ||
-            error?.response?.data?.message ||
-            error?.message ||
-            "Vercel Blob upload failed"
-        );
-        normalized.code = error?.code === "ECONNABORTED" ? "BLOB_TIMEOUT" : error?.code;
-        normalized.status = error?.response?.status;
+        const normalized: any = new Error(error?.message || "Vercel Blob upload failed");
+        normalized.code = error?.code;
+        normalized.status = error?.statusCode || error?.status;
         throw normalized;
     }
 };
@@ -132,16 +101,9 @@ const uploadImageToBlob = async (file: any): Promise<string> => {
 const deleteBlobByUrl = async (url: string) => {
     if (!url || !url.includes(".blob.vercel-storage.com/")) return;
     try {
-        await axios.post(VERCEL_BLOB_API + "/delete", { urls: [url] }, {
-            timeout: 10000,
-            headers: {
-                authorization: "Bearer " + getBlobToken(),
-                "x-api-version": VERCEL_BLOB_API_VERSION,
-                "content-type": "application/json",
-            },
-        });
+        await del(url);
     } catch (error: any) {
-        console.warn("Vercel Blob delete failed:", error?.response?.data || error?.message);
+        console.warn("Vercel Blob delete failed:", error?.message || error);
     }
 };
 
