@@ -16,7 +16,6 @@ import { useAuth, useUser } from "@clerk/expo";
 
 import { COLORS, getStatusColor } from "@/constants";
 import api, { getAuthHeaders } from "@/constants/api";
-import { dummyOrders } from "@/assets/assets";
 
 type OrderItem = {
     _id?: string;
@@ -63,10 +62,10 @@ export default function OrdersScreen() {
                     return;
                 }
             }
-            setOrders(dummyOrders as any);
+            setOrders([]);
         } catch (error) {
-            console.log("Failed to fetch live orders, using dummy orders:", error);
-            setOrders(dummyOrders as any);
+            console.warn("Failed to fetch live orders:", error);
+            setOrders([]);
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -119,7 +118,7 @@ export default function OrdersScreen() {
                             </Text>
                         </View>
                         <Text style={styles.itemPrice}>
-                            ${((orderItem.price || 0) * (orderItem.quantity || 1)).toFixed(2)}
+                            ₹{((orderItem.price || 0) * (orderItem.quantity || 1)).toFixed(2)}
                         </Text>
                     </View>
                 ))}
@@ -134,7 +133,7 @@ export default function OrdersScreen() {
                     </View>
                     <View style={styles.totalContainer}>
                         <Text style={styles.totalLabel}>Total: </Text>
-                        <Text style={styles.totalAmount}>${(item.totalAmount || 0).toFixed(2)}</Text>
+                        <Text style={styles.totalAmount}>₹{(item.totalAmount || 0).toFixed(2)}</Text>
                     </View>
                 </View>
             </View>
