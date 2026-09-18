@@ -96,7 +96,8 @@ export default function AddProduct() {
             await api.post('/products', formData, {
                 headers: {
                     ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-                }
+                },
+                timeout: 60000,
             });
 
             // Success
