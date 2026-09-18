@@ -9,7 +9,6 @@ export const getProducts = async (req: Request, res: Response) => {
         const query: any = { isActive: true };
 
         if (category && category !== 'All' && category !== 'all') {
-            const safeCategory = String(category).trim().slice(0, 50).replace(/[.*+?^$\${}()|[\]\\]/g, "\\        if (category && category !== 'All' && category !== 'all') {
             query.category = { $regex: new RegExp(`^${category}$`, 'i') };
         }
 
@@ -18,39 +17,6 @@ export const getProducts = async (req: Request, res: Response) => {
                 { name: { $regex: search as string, $options: 'i' } },
                 { description: { $regex: search as string, $options: 'i' } }
             ];
-        }");
-            if (safeCategory) {
-                query.category = { $regex: new RegExp(`^${safeCategory}import { Request, Response } from "express";
-import Product from "../models/Products.js";
-import cloudinary from "../config/cloudinary.js";
-
-// Get all products -> Get /api/products?page=1&limit=10
-export const getProducts = async (req: Request, res: Response) => {
-    try {
-        const { page = 1, limit = 50, category, search } = req.query;
-        const query: any = { isActive: true };
-
-, "i") };
-            }
-        }
-
-        if (search) {
-            const safeSearch = String(search).trim().slice(0, 100).replace(/[.*+?^$\${}()|[\]\\]/g, "\\        if (category && category !== 'All' && category !== 'all') {
-            query.category = { $regex: new RegExp(`^${category}$`, 'i') };
-        }
-
-        if (search) {
-            query.$or = [
-                { name: { $regex: search as string, $options: 'i' } },
-                { description: { $regex: search as string, $options: 'i' } }
-            ];
-        }");
-            if (safeSearch) {
-                query.$or = [
-                    { name: { $regex: safeSearch, $options: "i" } },
-                    { description: { $regex: safeSearch, $options: "i" } }
-                ];
-            }
         }
 
         const pageNumber = Math.max(1, Number(page) || 1);
@@ -88,7 +54,7 @@ export const getProducts = async (req: Request, res: Response) => {
 // Get single product -> Get /api/v1/product/:id
 export const getProduct = async (req: Request, res: Response) => {
     try {
-        const product = await Product.findById(req.params.id)
+        const product = await Product.findById(req.params.id).maxTimeMS(8000)
 
         if (!product) {
             return res.status(404).json({
