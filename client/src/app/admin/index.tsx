@@ -1,10 +1,10 @@
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { ScrollView, Text, View, ActivityIndicator, RefreshControl } from "react-native";
 import { COLORS, getStatusColor } from "@/constants";
 import { dummyAdminStats } from "@/assets/assets";
 import { useAuth } from "@clerk/expo";
-import api from "@/constants/api";
+import api, { getAuthHeaders } from "@/constants/api";
 
 export default function AdminDashboard() {
 
@@ -12,7 +12,7 @@ export default function AdminDashboard() {
     const router = useRouter();
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [stats, setStats] = useState({
+    const requestInFlight = useRef(false);\n    const lastSuccessfulFetch = useRef(0);\n    const [stats, setStats] = useState({
         totalUsers: 0,
         totalProducts: 0,
         totalOrders: 0,
@@ -20,7 +20,7 @@ export default function AdminDashboard() {
         recentOrders: []
     });
 
-    const fetchStats = async () => {
+    const fetchStats = useCallback(async (force = false) => {\n        const now = Date.now();\n        if (requestInFlight.current || (!force && now - lastSuccessfulFetch.current < 10000)) return;\n        requestInFlight.current = true;
         try {
             const token = await getToken()
             const { data } = await api.get('/admin/stats', {
@@ -36,7 +36,7 @@ export default function AdminDashboard() {
                     totalRevenue: data.data.totalRevenue ?? 0,
                     recentOrders: data.data.recentOrders ?? []
                 })
-            } else if (data.success) {
+                lastSuccessfulFetch.current = Date.now();\n            } else if (data.success) {
                 setStats({
                     totalUsers: data.totalUsers ?? 0,
                     totalProducts: data.totalProducts ?? 0,
@@ -58,13 +58,13 @@ export default function AdminDashboard() {
 
     useFocusEffect(
         useCallback(() => {
-            fetchStats();
-        }, [])
+            void fetchStats();
+        }, [fetchStats])
     );
 
     const onRefresh = () => {
         setRefreshing(true);
-        fetchStats();
+        void fetchStats(true);
     };
 
     if (loading && !refreshing) {
