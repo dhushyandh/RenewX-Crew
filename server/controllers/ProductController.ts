@@ -9,7 +9,7 @@ export const getProducts = async (req: Request, res: Response) => {
         const query: any = { isActive: true };
 
         if (category && category !== 'All' && category !== 'all') {
-            const safeCategory = String(category).replace(/[.*+?^$\\{}()|[\\]\\]/g, '\\        if (category && category !== 'All' && category !== 'all') {
+            const safeCategory = String(category).trim().slice(0, 50).replace(/[.*+?^$\${}()|[\]\\]/g, "\\        if (category && category !== 'All' && category !== 'all') {
             query.category = { $regex: new RegExp(`^${category}$`, 'i') };
         }
 
@@ -18,8 +18,9 @@ export const getProducts = async (req: Request, res: Response) => {
                 { name: { $regex: search as string, $options: 'i' } },
                 { description: { $regex: search as string, $options: 'i' } }
             ];
-        }');
-            query.category = { $regex: new RegExp(`^${safeCategory}import { Request, Response } from "express";
+        }");
+            if (safeCategory) {
+                query.category = { $regex: new RegExp(`^${safeCategory}import { Request, Response } from "express";
 import Product from "../models/Products.js";
 import cloudinary from "../config/cloudinary.js";
 
@@ -29,11 +30,12 @@ export const getProducts = async (req: Request, res: Response) => {
         const { page = 1, limit = 50, category, search } = req.query;
         const query: any = { isActive: true };
 
-, 'i') };
+, "i") };
+            }
         }
 
         if (search) {
-            const safeSearch = String(search).trim().slice(0, 100).replace(/[.*+?^$\\{}()|[\\]\\]/g, '\\        if (category && category !== 'All' && category !== 'all') {
+            const safeSearch = String(search).trim().slice(0, 100).replace(/[.*+?^$\${}()|[\]\\]/g, "\\        if (category && category !== 'All' && category !== 'all') {
             query.category = { $regex: new RegExp(`^${category}$`, 'i') };
         }
 
@@ -42,11 +44,11 @@ export const getProducts = async (req: Request, res: Response) => {
                 { name: { $regex: search as string, $options: 'i' } },
                 { description: { $regex: search as string, $options: 'i' } }
             ];
-        }');
+        }");
             if (safeSearch) {
                 query.$or = [
-                    { name: { $regex: safeSearch, $options: 'i' } },
-                    { description: { $regex: safeSearch, $options: 'i' } }
+                    { name: { $regex: safeSearch, $options: "i" } },
+                    { description: { $regex: safeSearch, $options: "i" } }
                 ];
             }
         }
@@ -86,7 +88,7 @@ export const getProducts = async (req: Request, res: Response) => {
 // Get single product -> Get /api/v1/product/:id
 export const getProduct = async (req: Request, res: Response) => {
     try {
-        const product = await Product.findById(req.params.id).maxTimeMS(8000)
+        const product = await Product.findById(req.params.id)
 
         if (!product) {
             return res.status(404).json({
@@ -110,23 +112,36 @@ export const createProduct = async (req: Request, res: Response) => {
     try {
         let images: string[] = [];
 
-        // Handle file uploads with Cloudinary
+        // Handle file uploads with Cloudinary and fast timeout fallback
         if (req.files && (req.files as any).length > 0) {
             try {
                 const uploadPromises = (req.files as any).map((file: any) => {
-                    return new Promise<string>((resolve, reject) => {
+                    return new Promise<string>((resolve) => {
+                        let isDone = false;
+                        const fallback = () => {
+                            if (!isDone) {
+                                isDone = true;
+                                const base64 = file.buffer.toString('base64');
+                                const mime = file.mimetype || 'image/jpeg';
+                                resolve(`data:${mime};base64,${base64}`);
+                            }
+                        };
+
                         const timer = setTimeout(() => {
-                            reject(new Error("Cloudinary upload timed out after 25s"));
-                        }, 25000);
+                            console.log("Cloudinary upload timed out, using direct image buffer");
+                            fallback();
+                        }, 5000);
 
                         try {
                             const uploadStream = cloudinary.uploader.upload_stream(
                                 { folder: 'ecommerce/products' },
                                 (error: any, result: any) => {
                                     clearTimeout(timer);
+                                    if (isDone) return;
+                                    isDone = true;
                                     if (error || !result?.secure_url) {
-                                        console.error("Cloudinary upload error:", error);
-                                        reject(error || new Error("Failed to get image secure_url"));
+                                        console.error("Cloudinary upload error, using buffer:", error);
+                                        fallback();
                                     } else {
                                         resolve(result.secure_url);
                                     }
@@ -135,23 +150,27 @@ export const createProduct = async (req: Request, res: Response) => {
                             uploadStream.end(file.buffer);
                         } catch (streamErr) {
                             clearTimeout(timer);
-                            reject(streamErr);
+                            fallback();
                         }
                     });
                 });
                 images = await Promise.all(uploadPromises);
             } catch (cloudErr: any) {
-                console.error("Cloudinary upload failed:", cloudErr.message);
-                return res.status(502).json({
-                    success: false,
-                    message: "Failed to upload product images to cloud storage. Please check Cloudinary configuration or use image URLs."
+                console.error("Cloudinary upload failed, using uploaded file buffer directly:", cloudErr.message);
+                images = (req.files as any).map((file: any) => {
+                    const base64 = file.buffer.toString('base64');
+                    const mime = file.mimetype || 'image/jpeg';
+                    return `data:${mime};base64,${base64}`;
                 });
             }
         }
 
         if (images.length === 0 && req.body.images) {
-            const rawImages = Array.isArray(req.body.images) ? req.body.images : [req.body.images];
-            images = rawImages.filter((img: any) => typeof img === 'string' && (img.startsWith('http://') || img.startsWith('https://') || (img.startsWith('data:') && img.length < 20000)));
+            if (Array.isArray(req.body.images)) {
+                images = req.body.images;
+            } else if (typeof req.body.images === 'string') {
+                images = [req.body.images];
+            }
         }
 
         let sizes = req.body.sizes || [];
@@ -206,19 +225,32 @@ export const updateProduct = async (req: Request, res: Response) => {
         if (req.files && (req.files as any).length > 0) {
             try {
                 const uploadPromises = (req.files as any).map((file: any) => {
-                    return new Promise<string>((resolve, reject) => {
+                    return new Promise<string>((resolve) => {
+                        let isDone = false;
+                        const fallback = () => {
+                            if (!isDone) {
+                                isDone = true;
+                                const base64 = file.buffer.toString('base64');
+                                const mime = file.mimetype || 'image/jpeg';
+                                resolve(`data:${mime};base64,${base64}`);
+                            }
+                        };
+
                         const timer = setTimeout(() => {
-                            reject(new Error("Cloudinary update upload timed out after 25s"));
-                        }, 25000);
+                            console.log("Cloudinary update upload timed out, using direct image buffer");
+                            fallback();
+                        }, 5000);
 
                         try {
                             const uploadStream = cloudinary.uploader.upload_stream(
                                 { folder: 'ecommerce/products' },
                                 (error: any, result: any) => {
                                     clearTimeout(timer);
+                                    if (isDone) return;
+                                    isDone = true;
                                     if (error || !result?.secure_url) {
-                                        console.error("Cloudinary upload error in update:", error);
-                                        reject(error || new Error("Failed to get image secure_url"));
+                                        console.error("Cloudinary upload error in update, using direct buffer:", error);
+                                        fallback();
                                     } else {
                                         resolve(result.secure_url);
                                     }
@@ -227,7 +259,7 @@ export const updateProduct = async (req: Request, res: Response) => {
                             uploadStream.end(file.buffer);
                         } catch (streamErr) {
                             clearTimeout(timer);
-                            reject(streamErr);
+                            fallback();
                         }
                     });
                 });
@@ -235,10 +267,12 @@ export const updateProduct = async (req: Request, res: Response) => {
                 images = [...images, ...newImages];
             } catch (cloudErr: any) {
                 console.error("Cloudinary upload error in updateProduct:", cloudErr.message);
-                return res.status(502).json({
-                    success: false,
-                    message: "Failed to upload product images to cloud storage. Please check Cloudinary configuration or use image URLs."
+                const newImages = (req.files as any).map((file: any) => {
+                    const base64 = file.buffer.toString('base64');
+                    const mime = file.mimetype || 'image/jpeg';
+                    return `data:${mime};base64,${base64}`;
                 });
+                images = [...images, ...newImages];
             }
         }
 
