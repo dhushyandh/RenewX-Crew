@@ -17,6 +17,7 @@ import paymentRoutes from "./routes/paymentRoutes.js";
 import { razorpayWebhook } from "./controllers/paymentWebhook.js";
 
 const app = express();
+await connectDB();
 
 app.post('/api/clerk', express.raw({ type: 'application/json' }), clerkWebhook);
 app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), razorpayWebhook);
