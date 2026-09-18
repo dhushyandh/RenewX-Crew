@@ -46,6 +46,18 @@ export const fetchRazorpayPayment = async (paymentId: string) => {
     return response.data;
 };
 
+export const refundRazorpayPayment = async (paymentId: string, amountInPaise: number) => {
+    const response = await axios.post(
+        `${RAZORPAY_API}/payments/${encodeURIComponent(paymentId)}/refund`,
+        {
+            amount: amountInPaise,
+            speed: "optimum",
+        },
+        authConfig()
+    );
+    return response.data;
+};
+
 export const verifyRazorpayPaymentSignature = (orderId: string, paymentId: string, signature: string) => {
     const { keySecret } = getCredentials();
     const expected = crypto.createHmac("sha256", keySecret).update(`${orderId}|${paymentId}`).digest("hex");
