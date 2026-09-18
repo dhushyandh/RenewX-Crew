@@ -19,16 +19,25 @@ export const getProducts = async (req: Request, res: Response) => {
             ];
         }
 
-        const total = await Product.countDocuments(query);
-        const products = await Product.find(query)
-            .sort({ createdAt: -1 })
-            .skip((Number(page) - 1) * Number(limit))
-            .limit(Number(limit));
+        const pageNumber = Math.max(1, Number(page) || 1);
+        const limitNumber = Math.min(50, Math.max(1, Number(limit) || 50));
+        const skip = (pageNumber - 1) * limitNumber;
+
+        // Run count and data query in parallel. lean() avoids the overhead of
+        // creating full Mongoose documents for a read-only product listing.
+        const [total, products] = await Promise.all([
+            Product.countDocuments(query),
+            Product.find(query)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limitNumber)
+                .lean(),
+        ]);
 
         return res.status(200).json({
             success: true,
             data: products,
-            pagination: { total, page: Number(page), pages: Math.ceil(total / Number(limit)) }
+            pagination: { total, page: pageNumber, pages: Math.ceil(total / limitNumber) }
         })
     } catch (error: any) {
         return res.status(500).json({
