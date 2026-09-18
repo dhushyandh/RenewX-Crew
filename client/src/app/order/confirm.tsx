@@ -74,6 +74,8 @@ type CheckoutData = {
 
 export default function OrderConfirmScreen() {
     const router = useRouter();
+    const { getToken } = useAuth();
+    const { user } = useUser();
 
     const params =
         useLocalSearchParams<{
@@ -136,11 +138,7 @@ export default function OrderConfirmScreen() {
 
     const handlePlaceOrder = async () => {
         if (!checkoutData) {
-            Alert.alert(
-                "Checkout Error",
-                "Your checkout information is missing. Please return to checkout."
-            );
-
+            Alert.alert("Checkout Error", "Your checkout information is missing. Please return to checkout.");
             router.replace("/checkout");
             return;
         }
@@ -148,57 +146,100 @@ export default function OrderConfirmScreen() {
         setPlacingOrder(true);
 
         try {
-            /*
-             * =========================================================
-             * ORDER API GOES HERE
-             * =========================================================
-             *
-             * At the moment your checkout flow does not expose
-             * an order-creation API in the uploaded code.
-             *
-             * We therefore do NOT pretend that an order was created.
-             *
-             * Once your order API is connected, this is where:
-             *
-             * await api.createOrder(...)
-             *
-             * should happen.
-             */
+            const authConfig = await getAuthHeaders(getToken);
+            if (!authConfig.headers?.Authorization) {
+                throw new Error("Authentication required");
+            }
 
-            await new Promise(
-                (resolve) =>
-                    setTimeout(resolve, 700)
-            );
+            const orderPayload = {
+                paymentMethod: checkoutData.paymentMethod === "cod" ? "cash" : "razorpay",
+                shippingAddress: {
+                    street: checkoutData.shippingAddress.address.trim(),
+                    city: checkoutData.shippingAddress.city.trim(),
+                    state: checkoutData.shippingAddress.state.trim(),
+                    zipCode: checkoutData.shippingAddress.pincode.trim(),
+                    country: "India",
+                },
+                items: checkoutData.items.map((item) => ({
+                    productId: item.productId,
+                    size: item.size,
+                    quantity: item.quantity,
+                })),
+            };
 
-            /*
-             * Temporary confirmation.
-             *
-             * This gives us the correct UI/navigation flow first.
-             */
-            Alert.alert(
-                "Order Ready",
-                "Your order details have been confirmed. The order API can now be connected.",
-                [
-                    {
-                        text: "OK",
-                        onPress: () => {
-                            router.replace(
-                                "/orders" as any
-                            );
-                        },
-                    },
-                ]
-            );
-        } catch (error) {
-            console.error(
-                "Place order error:",
-                error
+            if (checkoutData.paymentMethod === "cod") {
+                const response = await api.post("/orders", orderPayload, authConfig);
+
+                if (!response.data?.success) {
+                    throw new Error(response.data?.message || "Unable to place order");
+                }
+
+                Alert.alert("Order Placed", "Your order has been placed successfully.", [
+                    { text: "View Orders", onPress: () => router.replace("/orders" as any) },
+                ]);
+                return;
+            }
+
+            const paymentOrderResponse = await api.post(
+                "/payments/create-order",
+                { items: orderPayload.items },
+                authConfig
             );
 
-            Alert.alert(
-                "Order Failed",
-                "We couldn't place your order. Please try again."
+            const paymentOrder = paymentOrderResponse.data;
+            if (!paymentOrder?.success || !paymentOrder?.razorpayOrderId || !paymentOrder?.keyId) {
+                throw new Error(paymentOrder?.message || "Unable to start payment");
+            }
+
+            const paymentResult = await RazorpayCheckout.open({
+                key: paymentOrder.keyId,
+                amount: String(paymentOrder.amount),
+                currency: paymentOrder.currency || "INR",
+                name: "RenewX",
+                description: "RenewX order payment",
+                order_id: paymentOrder.razorpayOrderId,
+                prefill: {
+                    name: checkoutData.customer.fullName,
+                    email: user?.primaryEmailAddress?.emailAddress || "",
+                    contact: checkoutData.customer.phone,
+                },
+                theme: { color: "#111111" },
+            });
+
+            if (!paymentResult?.razorpay_payment_id ||
+                !paymentResult?.razorpay_order_id ||
+                !paymentResult?.razorpay_signature) {
+                throw new Error("Payment response could not be verified");
+            }
+
+            const response = await api.post(
+                "/orders",
+                {
+                    ...orderPayload,
+                    razorpayOrderId: paymentResult.razorpay_order_id,
+                    razorpayPaymentId: paymentResult.razorpay_payment_id,
+                    razorpaySignature: paymentResult.razorpay_signature,
+                },
+                authConfig
             );
+
+            if (!response.data?.success) {
+                throw new Error(response.data?.message || "Payment succeeded but order creation failed");
+            }
+
+            Alert.alert("Payment Successful", "Your order has been placed successfully.", [
+                { text: "View Orders", onPress: () => router.replace("/orders" as any) },
+            ]);
+        } catch (error: any) {
+            console.error("Place order error:", error?.response?.data || error);
+
+            const description =
+                error?.response?.data?.message ||
+                error?.description ||
+                error?.message ||
+                "We couldn't complete your order. Please try again.";
+
+            Alert.alert("Order Failed", description);
         } finally {
             setPlacingOrder(false);
         }
