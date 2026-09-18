@@ -2,26 +2,16 @@ import mongoose from "mongoose";
 
 const connectDB = async () => {
     const uri = process.env.MONGODB_URI;
+    if (!uri) throw new Error("MONGODB_URI is not configured.");
+    if (mongoose.connection.readyState === 1) return;
 
-    if (!uri) {
-        throw new Error("MONGODB_URI is not configured.");
-    }
+    // Never let disconnected API queries sit in Mongoose buffering until the HTTP client times out.
+    mongoose.set("bufferCommands", false);
+    mongoose.set("bufferTimeoutMS", 5000);
 
-    if (mongoose.connection.readyState === 1) {
-        return;
-    }
-
-    mongoose.connection.on("connected", () => {
-        console.log("✅ MongoDB connected successfully!");
-    });
-
-    mongoose.connection.on("error", (err) => {
-        console.error("❌ MongoDB connection error:", err);
-    });
-
-    mongoose.connection.on("disconnected", () => {
-        console.warn("⚠️ MongoDB disconnected.");
-    });
+    mongoose.connection.on("connected", () => console.log("✅ MongoDB connected successfully!"));
+    mongoose.connection.on("error", (err) => console.error("❌ MongoDB connection error:", err));
+    mongoose.connection.on("disconnected", () => console.warn("⚠️ MongoDB disconnected."));
 
     try {
         await mongoose.connect(uri, {
