@@ -4,6 +4,12 @@ import Order from "../models/order.js";
 import Cart from "../models/cart.js";
 import Product from "../models/Products.js";
 import { sendOrderPushNotification, sendAdminNewOrderNotification } from "../services/pushNotification.js";
+import {
+    fetchRazorpayOrder,
+    fetchRazorpayPayment,
+    refundRazorpayPayment,
+    verifyRazorpayPaymentSignature,
+} from "../services/razorpay.js";
 
 // Get user Orders -> GET /api/orders
 export const getOrders = async (req: Request, res: Response) => {
@@ -45,9 +51,9 @@ export const getOrder = async (req: Request, res: Response) => {
         }
 
         if (order.user.toString() !== userId.toString() && userRole !== "admin") {
-            return res.status(401).json({
+            return res.status(403).json({
                 success: false,
-                message: "Not authorized"
+                message: "Forbidden"
             });
         }
 
@@ -65,6 +71,10 @@ export const getOrder = async (req: Request, res: Response) => {
 
 export const createOrder = async (req: Request, res: Response) => {
     const session = await mongoose.startSession();
+    let paymentMethod: string | undefined;
+    let razorpayPaymentId: string | undefined;
+    let verifiedPaymentCaptured = false;
+    let totalAmount = 0;
 
     try {
         const userId = (req as any).user?.id || (req as any).user?._id;
@@ -75,13 +85,14 @@ export const createOrder = async (req: Request, res: Response) => {
             });
         }
 
-        const {
-            items: directItems,
-            shippingAddress,
-            paymentMethod,
-            notes,
-            paymentIntentId,
-        } = req.body;
+        const body = req.body || {};
+        paymentMethod = body.paymentMethod;
+        razorpayPaymentId = body.razorpayPaymentId;
+        const directItems = body.items;
+        const shippingAddress = body.shippingAddress;
+        const notes = body.notes;
+        const razorpayOrderId = body.razorpayOrderId;
+        const razorpaySignature = body.razorpaySignature;
 
         if (!shippingAddress?.street || !shippingAddress?.city ||
             !shippingAddress?.state || !shippingAddress?.zipCode ||
@@ -92,18 +103,18 @@ export const createOrder = async (req: Request, res: Response) => {
             });
         }
 
-        if (paymentMethod !== "cash" && paymentMethod !== "stripe") {
+        if (paymentMethod !== "cash" && paymentMethod !== "razorpay") {
             return res.status(400).json({
                 success: false,
                 message: "Invalid payment method",
             });
         }
 
-        // Stripe payment completion is controlled by the server/webhook.
-        if (paymentMethod === "stripe" && !paymentIntentId) {
+        if (paymentMethod === "razorpay" &&
+            (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature)) {
             return res.status(400).json({
                 success: false,
-                message: "Stripe payment intent is required",
+                message: "Online payment verification data is required",
             });
         }
 
@@ -187,7 +198,58 @@ export const createOrder = async (req: Request, res: Response) => {
         // Never accept shipping, tax, subtotal, or total from the client.
         const shippingCost = subtotal >= 1000 ? 0 : 80;
         const tax = 0;
-        const totalAmount = subtotal + shippingCost + tax;
+        totalAmount = subtotal + shippingCost + tax;
+
+        if (paymentMethod === "razorpay") {
+            const existingOrder = await Order.findOne({ razorpayOrderId });
+            if (existingOrder) {
+                return res.status(200).json({
+                    success: true,
+                    message: "Order already created",
+                    order: existingOrder,
+                });
+            }
+
+            try {
+                const razorpayOrder = await fetchRazorpayOrder(razorpayOrderId);
+                if (Number(razorpayOrder?.amount) !== Math.round(totalAmount * 100) ||
+                    razorpayOrder?.currency !== "INR") {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Payment amount verification failed",
+                    });
+                }
+
+                const validSignature = verifyRazorpayPaymentSignature(razorpayOrderId!, razorpayPaymentId!, razorpaySignature!);
+
+                if (!validSignature) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Payment verification failed",
+                    });
+                }
+
+                const payment = await fetchRazorpayPayment(razorpayPaymentId!);
+
+                if (payment?.order_id !== razorpayOrderId ||
+                    Number(payment?.amount) !== Math.round(totalAmount * 100) ||
+                    payment?.currency !== "INR" ||
+                    payment?.status !== "captured") {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Payment has not been captured",
+                    });
+                }
+
+                verifiedPaymentCaptured = true;
+            } catch (paymentError) {
+                console.error("Razorpay verification error:", paymentError);
+                return res.status(502).json({
+                    success: false,
+                    message: "Unable to verify online payment",
+                });
+            }
+        }
 
         let order: any;
 
@@ -219,22 +281,26 @@ export const createOrder = async (req: Request, res: Response) => {
                     .slice(2, 8)
                     .toUpperCase()}`;
 
-            const created = await Order.create(
+            const created: any = await (Order as any).create(
                 [{
                     user: userId,
                     items: orderItems,
                     shippingAddress,
                     paymentMethod,
-                    paymentStatus: "pending",
+                    paymentStatus: paymentMethod === "razorpay" ? "completed" : "pending",
                     orderStatus: "placed",
                     totalAmount,
                     subtotal,
                     tax,
                     shippingCost,
                     notes,
-                    paymentIntentId:
-                        paymentMethod === "stripe"
-                            ? paymentIntentId
+                    razorpayOrderId:
+                        paymentMethod === "razorpay"
+                            ? razorpayOrderId
+                            : undefined,
+                    razorpayPaymentId:
+                        paymentMethod === "razorpay"
+                            ? razorpayPaymentId
                             : undefined,
                     orderNumber,
                 }],
@@ -277,13 +343,21 @@ export const createOrder = async (req: Request, res: Response) => {
             order,
         });
     } catch (error: any) {
+        // If Razorpay captured the payment but our order transaction failed,
+        // refund the captured amount rather than leaving the customer charged
+        // without a corresponding order.
+        if (paymentMethod === "razorpay" && verifiedPaymentCaptured && razorpayPaymentId) {
+            try {
+                await refundRazorpayPayment(razorpayPaymentId, Math.round(totalAmount * 100));
+            } catch (refundError) {
+                console.error("CRITICAL: Razorpay refund failed after order creation failure:", refundError);
+            }
+        }
+
         if (error?.message?.startsWith("INSUFFICIENT_STOCK:")) {
             return res.status(409).json({
                 success: false,
-                message: `Insufficient stock for ${error.message.replace(
-                    "INSUFFICIENT_STOCK:",
-                    ""
-                )}. Please refresh your cart and try again.`,
+                message: `Stock changed while processing your payment. The payment has been refunded. Please refresh and try again.`,
             });
         }
 
@@ -291,18 +365,30 @@ export const createOrder = async (req: Request, res: Response) => {
 
         return res.status(500).json({
             success: false,
-            message: "Failed to create order",
+            message: paymentMethod === "razorpay"
+                ? "Order creation failed. If your payment was captured, it has been submitted for refund."
+                : "Failed to create order",
         });
     } finally {
         await session.endSession();
     }
 };
 
+    
 // Update order status -> PUT /api/orders/:id/status
 export const updateOrderStatus = async (req: Request, res: Response) => {
     try {
         const { orderStatus, status, paymentStatus } = req.body;
         const targetStatus = orderStatus || status;
+        const allowedOrderStatuses = ["cancelled", "placed", "processing", "shipped", "delivered"];
+        const allowedPaymentStatuses = ["pending", "completed", "cancelled"];
+
+        if (targetStatus && !allowedOrderStatuses.includes(targetStatus)) {
+            return res.status(400).json({ success: false, message: "Invalid order status" });
+        }
+        if (paymentStatus && !allowedPaymentStatuses.includes(paymentStatus)) {
+            return res.status(400).json({ success: false, message: "Invalid payment status" });
+        }
 
         const order = await Order.findById(req.params.id);
         if (!order) {
@@ -351,9 +437,16 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
 // Get all orders -> GET /api/orders/admin/all
 export const getAllOrders = async (req: Request, res: Response) => {
     try {
-        const { page = 1, limit = 50, status } = req.query;
+        const page = Math.max(1, Number(req.query.page) || 1);
+        const requestedLimit = Math.max(1, Number(req.query.limit) || 50);
+        const limit = Math.min(requestedLimit, 100);
+        const status = typeof req.query.status === "string" ? req.query.status : undefined;
         const query: any = {};
         if (status) {
+            const allowedStatuses = ["cancelled", "placed", "processing", "shipped", "delivered"];
+            if (!allowedStatuses.includes(status)) {
+                return res.status(400).json({ success: false, message: "Invalid order status filter" });
+            }
             query.orderStatus = status;
         }
 
@@ -361,8 +454,8 @@ export const getAllOrders = async (req: Request, res: Response) => {
             .sort("-createdAt")
             .populate("user", "name email")
             .populate("items.product", "name images price")
-            .skip((Number(page) - 1) * Number(limit))
-            .limit(Number(limit));
+            .skip((page - 1) * limit)
+            .limit(limit);
 
         const totalOrders = await Order.countDocuments(query);
 
@@ -372,9 +465,9 @@ export const getAllOrders = async (req: Request, res: Response) => {
             totalOrders,
             pagination: {
                 total: totalOrders,
-                page: Number(page),
-                pages: Math.ceil(totalOrders / Number(limit)),
-                limit: Number(limit)
+                page,
+                pages: Math.ceil(totalOrders / limit),
+                limit
             }
         });
     } catch (error: any) {

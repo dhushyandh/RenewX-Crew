@@ -828,7 +828,7 @@ export default function Checkout() {
                             {cartItems.map(
                                 (item, index) => (
                                     <View
-                                        key={`${item.productId}-${item.size}`}
+                                        key={`₹{item.productId}-₹{item.size}`}
                                         style={[
                                             styles.orderItem,
                                             index <
@@ -899,7 +899,7 @@ export default function Checkout() {
                                                     styles.productPrice
                                                 }
                                             >
-                                                $
+                                                ₹
                                                 {(
                                                     item.product
                                                         .price *
@@ -939,7 +939,7 @@ export default function Checkout() {
                                         styles.summaryValue
                                     }
                                 >
-                                    ${subtotal.toFixed(2)}
+                                    ₹{subtotal.toFixed(2)}
                                 </Text>
                             </View>
 
@@ -965,7 +965,7 @@ export default function Checkout() {
                                 >
                                     {shipping === 0
                                         ? "FREE"
-                                        : `$${shipping.toFixed(
+                                        : `₹₹{shipping.toFixed(
                                               2,
                                           )}`}
                                 </Text>
@@ -978,7 +978,7 @@ export default function Checkout() {
                                     }
                                 >
                                     Free shipping on orders
-                                    over $1,000
+                                    over ₹1,000
                                 </Text>
                             ) : null}
 
@@ -1006,7 +1006,7 @@ export default function Checkout() {
                                         styles.totalValue
                                     }
                                 >
-                                    ${total.toFixed(2)}
+                                    ₹{total.toFixed(2)}
                                 </Text>
                             </View>
                         </View>
@@ -1064,7 +1064,7 @@ export default function Checkout() {
                         </Text>
 
                         <Text style={styles.bottomTotal}>
-                            ${total.toFixed(2)}
+                            ₹{total.toFixed(2)}
                         </Text>
                     </View>
 

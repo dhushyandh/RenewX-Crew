@@ -13,6 +13,8 @@ const productSchema = new Schema<IProduct>({
     isActive: { type: Boolean, default: true },
 }, { timestamps: true })
 
+productSchema.index({ isActive: 1, createdAt: -1 });
+productSchema.index({ isActive: 1, category: 1, createdAt: -1 });
 productSchema.index({ name: 'text', description: 'text' })
 
 const Product = mongoose.model<IProduct>('Product', productSchema)

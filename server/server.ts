@@ -13,20 +13,33 @@ import orderRoutes from "./routes/orderRoutes.js";
 import AddressRoutes from "./routes/addressRoutes.js";
 import AdminRoutes from "./routes/adminRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
+import paymentRoutes from "./routes/paymentRoutes.js";
+import { razorpayWebhook } from "./controllers/paymentWebhook.js";
 
 const app = express();
-await connectDB()
 
-app.post('/api/clerk', express.raw({ type: 'application/json' }), clerkWebhook)
+app.post('/api/clerk', express.raw({ type: 'application/json' }), clerkWebhook);
+app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), razorpayWebhook);
 
 // Security middleware
 app.disable("x-powered-by");
 app.use(helmet());
 
-const allowedOrigins = (process.env.CORS_ORIGINS || "")
+const configuredOrigins = (process.env.CORS_ORIGINS || "")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
+
+const isProduction = process.env.NODE_ENV === "production";
+const allowedOrigins = isProduction
+    ? configuredOrigins
+    : [
+        ...configuredOrigins,
+        "http://localhost:8081",
+        "http://127.0.0.1:8081",
+        "http://localhost:19006",
+        "http://127.0.0.1:19006",
+    ];
 
 app.use(cors({
     origin: (origin, callback) => {
@@ -56,8 +69,6 @@ app.use(cors({
 // Limit JSON payloads to reduce accidental/malicious memory usage.
 app.use(express.json({ limit: "1mb" }));
 
-// Global API rate limit. Authentication/payment-sensitive endpoints should
-// receive stricter limits as those routes are hardened.
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 300,
@@ -71,7 +82,6 @@ const apiLimiter = rateLimit({
 
 app.use("/api", apiLimiter);
 
-// Handle malformed JSON body errors cleanly without noisy stack traces
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     if (err instanceof SyntaxError && "status" in err && (err as any).status === 400 && "body" in err) {
         return res.status(400).json({
@@ -85,22 +95,22 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 app.use(clerkMiddleware());
 
 app.get("/health", (req: Request, res: Response) => {
-    return res.send("OK");
+    return res.status(200).json({ success: true, status: "ok" });
 });
-const port = process.env.PORT || 3000;
 
-// Routes
+const port = Number(process.env.PORT || 3000);
+
 app.get('/', (req: Request, res: Response) => {
     res.send('Server is Live!');
 });
-app.use('/api/products', productRoutes)
-app.use('/api/cart', CartRoutes)
-app.use('/api/orders', orderRoutes)
-app.use('/api/addresses', AddressRoutes)
-app.use('/api/notifications', notificationRoutes)
 
-// Admin Route
-app.use('/api/admin', AdminRoutes)
+app.use('/api/products', productRoutes);
+app.use('/api/cart', CartRoutes);
+app.use('/api/orders', orderRoutes);
+app.use('/api/addresses', AddressRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/admin', AdminRoutes);
 
 await makeAdmin();
 

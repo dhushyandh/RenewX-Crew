@@ -29,7 +29,12 @@ const getBaseUrl = (): string => {
         }
     }
 
-    // 4. Default to current developer LAN IP for physical device testing
+    // 4. Production fallback. Release builds must never depend on a developer LAN IP.
+    if (!__DEV__) {
+        return 'https://api-dhushyandh.onrender.com/api';
+    }
+
+    // 5. Default to the developer LAN IP for physical-device testing.
     return 'http://192.168.1.6:3000/api';
 };
 
