@@ -16,6 +16,9 @@ import {
     useLocalSearchParams,
     useRouter,
 } from "expo-router";
+import { useAuth, useUser } from "@clerk/expo";
+import RazorpayCheckout from "react-native-razorpay";
+import api, { getAuthHeaders } from "@/constants/api";
 
 const COLORS = {
     background: "#F7F7F7",
