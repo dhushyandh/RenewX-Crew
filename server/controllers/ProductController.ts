@@ -74,36 +74,23 @@ export const createProduct = async (req: Request, res: Response) => {
     try {
         let images: string[] = [];
 
-        // Handle file uploads with Cloudinary and fast timeout fallback
+        // Handle file uploads with Cloudinary
         if (req.files && (req.files as any).length > 0) {
             try {
                 const uploadPromises = (req.files as any).map((file: any) => {
-                    return new Promise<string>((resolve) => {
-                        let isDone = false;
-                        const fallback = () => {
-                            if (!isDone) {
-                                isDone = true;
-                                const base64 = file.buffer.toString('base64');
-                                const mime = file.mimetype || 'image/jpeg';
-                                resolve(`data:${mime};base64,${base64}`);
-                            }
-                        };
-
+                    return new Promise<string>((resolve, reject) => {
                         const timer = setTimeout(() => {
-                            console.log("Cloudinary upload timed out, using direct image buffer");
-                            fallback();
-                        }, 5000);
+                            reject(new Error("Cloudinary upload timed out after 25s"));
+                        }, 25000);
 
                         try {
                             const uploadStream = cloudinary.uploader.upload_stream(
                                 { folder: 'ecommerce/products' },
                                 (error: any, result: any) => {
                                     clearTimeout(timer);
-                                    if (isDone) return;
-                                    isDone = true;
                                     if (error || !result?.secure_url) {
-                                        console.error("Cloudinary upload error, using buffer:", error);
-                                        fallback();
+                                        console.error("Cloudinary upload error:", error);
+                                        reject(error || new Error("Failed to get image secure_url"));
                                     } else {
                                         resolve(result.secure_url);
                                     }
@@ -112,27 +99,23 @@ export const createProduct = async (req: Request, res: Response) => {
                             uploadStream.end(file.buffer);
                         } catch (streamErr) {
                             clearTimeout(timer);
-                            fallback();
+                            reject(streamErr);
                         }
                     });
                 });
                 images = await Promise.all(uploadPromises);
             } catch (cloudErr: any) {
-                console.error("Cloudinary upload failed, using uploaded file buffer directly:", cloudErr.message);
-                images = (req.files as any).map((file: any) => {
-                    const base64 = file.buffer.toString('base64');
-                    const mime = file.mimetype || 'image/jpeg';
-                    return `data:${mime};base64,${base64}`;
+                console.error("Cloudinary upload failed:", cloudErr.message);
+                return res.status(502).json({
+                    success: false,
+                    message: "Failed to upload product images to cloud storage. Please check Cloudinary configuration or use image URLs."
                 });
             }
         }
 
         if (images.length === 0 && req.body.images) {
-            if (Array.isArray(req.body.images)) {
-                images = req.body.images;
-            } else if (typeof req.body.images === 'string') {
-                images = [req.body.images];
-            }
+            const rawImages = Array.isArray(req.body.images) ? req.body.images : [req.body.images];
+            images = rawImages.filter((img: any) => typeof img === 'string' && (img.startsWith('http://') || img.startsWith('https://') || (img.startsWith('data:') && img.length < 20000)));
         }
 
         let sizes = req.body.sizes || [];
@@ -187,32 +170,19 @@ export const updateProduct = async (req: Request, res: Response) => {
         if (req.files && (req.files as any).length > 0) {
             try {
                 const uploadPromises = (req.files as any).map((file: any) => {
-                    return new Promise<string>((resolve) => {
-                        let isDone = false;
-                        const fallback = () => {
-                            if (!isDone) {
-                                isDone = true;
-                                const base64 = file.buffer.toString('base64');
-                                const mime = file.mimetype || 'image/jpeg';
-                                resolve(`data:${mime};base64,${base64}`);
-                            }
-                        };
-
+                    return new Promise<string>((resolve, reject) => {
                         const timer = setTimeout(() => {
-                            console.log("Cloudinary update upload timed out, using direct image buffer");
-                            fallback();
-                        }, 5000);
+                            reject(new Error("Cloudinary update upload timed out after 25s"));
+                        }, 25000);
 
                         try {
                             const uploadStream = cloudinary.uploader.upload_stream(
                                 { folder: 'ecommerce/products' },
                                 (error: any, result: any) => {
                                     clearTimeout(timer);
-                                    if (isDone) return;
-                                    isDone = true;
                                     if (error || !result?.secure_url) {
-                                        console.error("Cloudinary upload error in update, using direct buffer:", error);
-                                        fallback();
+                                        console.error("Cloudinary upload error in update:", error);
+                                        reject(error || new Error("Failed to get image secure_url"));
                                     } else {
                                         resolve(result.secure_url);
                                     }
@@ -221,7 +191,7 @@ export const updateProduct = async (req: Request, res: Response) => {
                             uploadStream.end(file.buffer);
                         } catch (streamErr) {
                             clearTimeout(timer);
-                            fallback();
+                            reject(streamErr);
                         }
                     });
                 });
@@ -229,12 +199,10 @@ export const updateProduct = async (req: Request, res: Response) => {
                 images = [...images, ...newImages];
             } catch (cloudErr: any) {
                 console.error("Cloudinary upload error in updateProduct:", cloudErr.message);
-                const newImages = (req.files as any).map((file: any) => {
-                    const base64 = file.buffer.toString('base64');
-                    const mime = file.mimetype || 'image/jpeg';
-                    return `data:${mime};base64,${base64}`;
+                return res.status(502).json({
+                    success: false,
+                    message: "Failed to upload product images to cloud storage. Please check Cloudinary configuration or use image URLs."
                 });
-                images = [...images, ...newImages];
             }
         }
 

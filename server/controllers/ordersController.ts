@@ -19,7 +19,8 @@ export const getOrders = async (req: Request, res: Response) => {
 
         const orders = await Order.find(query)
             .sort("-createdAt")
-            .populate("items.product", "name images price stock category");
+            .populate("items.product", "name images price stock category")
+            .lean();
 
         return res.status(200).json({
             success: true,
@@ -265,7 +266,7 @@ export const createOrder = async (req: Request, res: Response) => {
                         stock: { $gte: item.quantity },
                     },
                     { $inc: { stock: -item.quantity } },
-                    { new: true, session }
+                    { returnDocument: 'after', session }
                 );
 
                 if (!updated) {
@@ -450,14 +451,16 @@ export const getAllOrders = async (req: Request, res: Response) => {
             query.orderStatus = status;
         }
 
-        const orders = await Order.find(query)
-            .sort("-createdAt")
-            .populate("user", "name email")
-            .populate("items.product", "name images price")
-            .skip((page - 1) * limit)
-            .limit(limit);
-
-        const totalOrders = await Order.countDocuments(query);
+        const [orders, totalOrders] = await Promise.all([
+            Order.find(query)
+                .sort("-createdAt")
+                .populate("user", "name email")
+                .populate("items.product", "name images price")
+                .skip((page - 1) * limit)
+                .limit(limit)
+                .lean(),
+            Order.countDocuments(query),
+        ]);
 
         return res.status(200).json({
             success: true,
@@ -497,7 +500,7 @@ export const updateOrder = async (req: Request, res: Response) => {
         const order = await Order.findByIdAndUpdate(
             req.params.id,
             updates,
-            { new: true }
+            { returnDocument: 'after' }
         ).populate("user", "name email").populate("items.product", "name images price");
 
         if (!order) {

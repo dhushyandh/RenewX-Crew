@@ -15,11 +15,11 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useUser } from "@clerk/expo";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useAuth, useUser } from "@clerk/expo";
 import * as Location from "expo-location";
 
 import { COLORS } from "@/constants";
+import api, { getAuthHeaders } from "@/constants/api";
 
 type AddressType = "home" | "office" | "other";
 
@@ -57,22 +57,17 @@ const EMPTY_FORM: AddressForm = {
     type: "home",
 };
 
-function getStorageKey(userId: string) {
-    return `renewx_shipping_addresses_${userId}`;
-}
-
-function createAddressId() {
-    return `address_${Date.now()}_${Math.random()
-        .toString(36)
-        .slice(2, 9)}`;
-}
-
 export default function AddressesScreen() {
     const router = useRouter();
     const { isLoaded, isSignedIn, user } = useUser();
 
     const [addresses, setAddresses] = useState<ShippingAddress[]>([]);
     const [loading, setLoading] = useState(true);
+
+    const defaultAddress = useMemo(
+        () => addresses.find((address) => address.isDefault) ?? addresses[0] ?? null,
+        [addresses]
+    );
 
     const [modalVisible, setModalVisible] = useState(false);
     const [editingAddress, setEditingAddress] =
@@ -85,8 +80,22 @@ export default function AddressesScreen() {
 
     const userId = user?.id;
 
+    const { getToken } = useAuth();
+
+    const normalizeAddress = useCallback((item: any): ShippingAddress => ({
+        id: String(item._id ?? item.id),
+        title: item.type === "Work" ? "Office" : item.type ?? "Home",
+        street: item.street ?? "",
+        city: item.city ?? "",
+        state: item.state ?? "",
+        pincode: item.zipCode ?? item.pincode ?? "",
+        country: item.country ?? "India",
+        isDefault: item.isDefault === true,
+        type: item.type === "Work" ? "office" : item.type === "Other" ? "other" : "home",
+    }), []);
+
     const loadAddresses = useCallback(async () => {
-        if (!userId) {
+        if (!userId || !isSignedIn) {
             setAddresses([]);
             setLoading(false);
             return;
@@ -94,62 +103,24 @@ export default function AddressesScreen() {
 
         try {
             setLoading(true);
-
-            const stored = await AsyncStorage.getItem(
-                getStorageKey(userId)
-            );
-
-            if (!stored) {
-                setAddresses([]);
-                return;
-            }
-
-            const parsed = JSON.parse(stored);
-
-            if (Array.isArray(parsed)) {
-                setAddresses(parsed);
-            } else {
-                setAddresses([]);
-            }
+            const authConfig = await getAuthHeaders(getToken);
+            const response = await api.get("/addresses", authConfig);
+            const serverAddresses = Array.isArray(response.data?.data)
+                ? response.data.data.map(normalizeAddress)
+                : [];
+            setAddresses(serverAddresses);
         } catch (error) {
             console.error("Failed to load addresses:", error);
-
-            Alert.alert(
-                "Unable to load addresses",
-                "We couldn't load your saved addresses."
-            );
-
+            Alert.alert("Unable to load addresses", "We couldn't load your saved addresses. Please try again.");
             setAddresses([]);
         } finally {
             setLoading(false);
         }
-    }, [userId]);
+    }, [userId, isSignedIn, getToken, normalizeAddress]);
 
     useEffect(() => {
         loadAddresses();
     }, [loadAddresses]);
-
-    const defaultAddress = useMemo(
-        () =>
-            addresses.find((address) => address.isDefault) ??
-            addresses[0] ??
-            null,
-        [addresses]
-    );
-
-    const persistAddresses = useCallback(
-        async (nextAddresses: ShippingAddress[]) => {
-            if (!userId) return;
-
-            await AsyncStorage.setItem(
-                getStorageKey(userId),
-                JSON.stringify(nextAddresses)
-            );
-
-            setAddresses(nextAddresses);
-        },
-        [userId]
-    );
 
     const openAddModal = useCallback(() => {
         setEditingAddress(null);
@@ -238,94 +209,46 @@ export default function AddressesScreen() {
 
     const saveAddress = useCallback(async () => {
         if (!userId) {
-            Alert.alert(
-                "Sign in required",
-                "Please sign in before adding a shipping address."
-            );
+            Alert.alert("Sign in required", "Please sign in before adding a shipping address.");
             router.push("/sign-in");
             return;
         }
-
         if (!validateForm()) return;
 
         try {
             setSaving(true);
-
-            const isMakingDefault =
-                form.isDefault || addresses.length === 0;
-
-            const newAddress: ShippingAddress = {
-                id:
-                    editingAddress?.id ??
-                    createAddressId(),
-                title:
-                    form.title.trim() || "Home",
+            const authConfig = await getAuthHeaders(getToken);
+            const payload = {
+                type: form.type === "office" ? "Work" : form.type === "other" ? "Other" : "Home",
                 street: form.street.trim(),
                 city: form.city.trim(),
                 state: form.state.trim(),
-                pincode: form.pincode.trim(),
-                country:
-                    form.country.trim() || "India",
-                isDefault: isMakingDefault,
-                type: form.type,
+                zipCode: form.pincode.trim(),
+                country: form.country.trim() || "India",
+                isDefault: form.isDefault || addresses.length === 0,
             };
 
-            let nextAddresses: ShippingAddress[];
+            const response = editingAddress
+                ? await api.put(`/addresses/${editingAddress.id}`, payload, authConfig)
+                : await api.post("/addresses", payload, authConfig);
 
-            if (editingAddress) {
-                nextAddresses = addresses.map((address) =>
-                    address.id === editingAddress.id
-                        ? newAddress
-                        : isMakingDefault
-                            ? {
-                                ...address,
-                                isDefault: false,
-                            }
-                            : address
-                );
-            } else {
-                nextAddresses = isMakingDefault
-                    ? [
-                        ...addresses.map((address) => ({
-                            ...address,
-                            isDefault: false,
-                        })),
-                        newAddress,
-                    ]
-                    : [...addresses, newAddress];
+            if (!response.data?.success || !response.data?.data) {
+                throw new Error("Invalid address response");
             }
 
-            await persistAddresses(nextAddresses);
-
+            await loadAddresses();
             setModalVisible(false);
             setEditingAddress(null);
             setForm(EMPTY_FORM);
-
-            Alert.alert(
-                "Address saved",
-                editingAddress
-                    ? "Your address has been updated."
-                    : "Your address has been added successfully."
-            );
-        } catch (error) {
+            Alert.alert("Address saved", editingAddress ? "Your address has been updated." : "Your address has been added successfully.");
+        } catch (error: any) {
             console.error("Save address error:", error);
-
-            Alert.alert(
-                "Unable to save",
-                "Something went wrong while saving your address."
-            );
+            const message = error?.response?.data?.message || "Something went wrong while saving your address.";
+            Alert.alert("Unable to save", message);
         } finally {
             setSaving(false);
         }
-    }, [
-        userId,
-        router,
-        validateForm,
-        form,
-        addresses,
-        editingAddress,
-        persistAddresses,
-    ]);
+    }, [userId, router, validateForm, form, addresses.length, editingAddress, getToken, loadAddresses]);
 
     const useCurrentLocation = useCallback(async () => {
         if (!userId) {
@@ -425,82 +348,44 @@ export default function AddressesScreen() {
         }
     }, [userId, router]);
 
-    const deleteAddress = useCallback(
-        (address: ShippingAddress) => {
-            Alert.alert(
-                "Delete address?",
-                `Remove "${address.title}" from your saved addresses?`,
-                [
-                    {
-                        text: "Cancel",
-                        style: "cancel",
-                    },
-                    {
-                        text: "Delete",
-                        style: "destructive",
-                        onPress: async () => {
-                            try {
-                                let next =
-                                    addresses.filter(
-                                        (item) =>
-                                            item.id !==
-                                            address.id
-                                    );
+    const deleteAddress = useCallback((address: ShippingAddress) => {
+        Alert.alert("Delete address?", `Remove "${address.title}" from your saved addresses?`, [
+            { text: "Cancel", style: "cancel" },
+            {
+                text: "Delete",
+                style: "destructive",
+                onPress: async () => {
+                    try {
+                        const authConfig = await getAuthHeaders(getToken);
+                        await api.delete(`/addresses/${address.id}`, authConfig);
+                        await loadAddresses();
+                    } catch (error: any) {
+                        console.error("Delete address error:", error);
+                        Alert.alert("Unable to delete", error?.response?.data?.message || "Please try again.");
+                    }
+                },
+            },
+        ]);
+    }, [getToken, loadAddresses]);
 
-                                if (
-                                    address.isDefault &&
-                                    next.length > 0
-                                ) {
-                                    next = next.map(
-                                        (item, index) => ({
-                                            ...item,
-                                            isDefault:
-                                                index === 0,
-                                        })
-                                    );
-                                }
-
-                                await persistAddresses(
-                                    next
-                                );
-                            } catch (error) {
-                                console.error(
-                                    "Delete address error:",
-                                    error
-                                );
-
-                                Alert.alert(
-                                    "Unable to delete",
-                                    "Please try again."
-                                );
-                            }
-                        },
-                    },
-                ]
-            );
-        },
-        [addresses, persistAddresses]
-    );
-
-    const makeDefault = useCallback(
-        async (address: ShippingAddress) => {
-            const next = addresses.map((item) => ({
-                ...item,
-                isDefault:
-                    item.id === address.id,
-            }));
-
-            try {
-                await persistAddresses(next);
-            } catch (error) {
-                console.error(
-                    "Default address error:",
-                    error
-                );
-            }
-        },
-        [addresses, persistAddresses]
-    );
+    const makeDefault = useCallback(async (address: ShippingAddress) => {
+        try {
+            const authConfig = await getAuthHeaders(getToken);
+            await api.put(`/addresses/${address.id}`, {
+                type: address.type === "office" ? "Work" : address.type === "other" ? "Other" : "Home",
+                street: address.street,
+                city: address.city,
+                state: address.state,
+                zipCode: address.pincode,
+                country: address.country,
+                isDefault: true,
+            }, authConfig);
+            await loadAddresses();
+        } catch (error: any) {
+            console.error("Default address error:", error);
+            Alert.alert("Unable to update default address", error?.response?.data?.message || "Please try again.");
+        }
+    }, [getToken, loadAddresses]);
 
     if (!isLoaded) {
         return (

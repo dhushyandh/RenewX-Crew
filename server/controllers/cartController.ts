@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import mongoose from "mongoose";
 import Cart from "../models/cart.js";
 import Product from "../models/Products.js";
 
@@ -20,19 +21,22 @@ export const getCart = async (req: Request, res: Response) => {
 export const addToCart = async (req: Request, res: Response) => {
     try {
         const { productId, quantity = 1, size } = req.body;
-        if (!productId || !isValidQuantity(quantity) || typeof size !== "string" || !size.trim()) {
+        if (!productId || !mongoose.isValidObjectId(productId) || !isValidQuantity(quantity) || typeof size !== "string" || !size.trim()) {
             return res.status(400).json({ success: false, message: "A valid product, quantity, and size are required" });
         }
 
+        const normalizedSize = size.trim();
         const product = await Product.findOne({ _id: productId, isActive: true });
         if (!product) return res.status(404).json({ success: false, message: "Product not found" });
-        if (!product.sizes.includes(size)) return res.status(400).json({ success: false, message: "Invalid size" });
+        if (product.sizes && product.sizes.length > 0 && !product.sizes.includes(normalizedSize)) {
+            return res.status(400).json({ success: false, message: `Invalid size: ${normalizedSize}. Available sizes: ${product.sizes.join(', ')}` });
+        }
 
         let cart = await Cart.findOne({ user: req.user.id });
         if (!cart) cart = await Cart.create({ user: req.user.id, items: [] });
 
         const existingItem = cart.items.find(
-            item => item.product.toString() === productId && item.size === size
+            item => item.product.toString() === productId && item.size === normalizedSize
         );
         const resultingQuantity = (existingItem?.quantity ?? 0) + quantity;
 
@@ -47,7 +51,7 @@ export const addToCart = async (req: Request, res: Response) => {
             existingItem.quantity = resultingQuantity;
             existingItem.price = product.price;
         } else {
-            cart.items.push({ product: product._id, price: product.price, quantity, size });
+            cart.items.push({ product: product._id, price: product.price, quantity, size: normalizedSize });
         }
 
         cart.calculateTotal();
@@ -64,29 +68,32 @@ export const updateCartItem = async (req: Request, res: Response) => {
         const { itemId } = req.params;
         const { quantity, size } = req.body;
 
-        if (!itemId || typeof size !== "string" || !size.trim()) {
+        if (!itemId || !mongoose.isValidObjectId(itemId) || typeof size !== "string" || !size.trim()) {
             return res.status(400).json({ success: false, message: "Product and size are required" });
         }
         if (typeof quantity !== "number" || !Number.isInteger(quantity) || quantity < 0 || quantity > MAX_CART_QUANTITY) {
             return res.status(400).json({ success: false, message: "Quantity must be an integer between 0 and 100" });
         }
 
+        const normalizedSize = size.trim();
         const cart = await Cart.findOne({ user: req.user.id });
         if (!cart) return res.status(404).json({ success: false, message: "Cart not found" });
 
         const item = cart.items.find(
-            cartItem => cartItem.product.toString() === itemId && cartItem.size === size
+            cartItem => cartItem.product.toString() === itemId && cartItem.size === normalizedSize
         );
         if (!item) return res.status(404).json({ success: false, message: "Item not found in cart" });
 
         if (quantity === 0) {
             cart.items = cart.items.filter(
-                cartItem => !(cartItem.product.toString() === itemId && cartItem.size === size)
+                cartItem => !(cartItem.product.toString() === itemId && cartItem.size === normalizedSize)
             );
         } else {
             const product = await Product.findOne({ _id: item.product, isActive: true });
             if (!product) return res.status(404).json({ success: false, message: "Product not found" });
-            if (!product.sizes.includes(size)) return res.status(400).json({ success: false, message: "Invalid size" });
+            if (product.sizes && product.sizes.length > 0 && !product.sizes.includes(normalizedSize)) {
+                return res.status(400).json({ success: false, message: `Invalid size: ${normalizedSize}. Available sizes: ${product.sizes.join(', ')}` });
+            }
             if (product.stock < quantity) return res.status(400).json({ success: false, message: "Insufficient stock" });
             item.quantity = quantity;
             item.price = product.price;
@@ -104,15 +111,16 @@ export const updateCartItem = async (req: Request, res: Response) => {
 export const removeCartItem = async (req: Request, res: Response) => {
     try {
         const { itemId } = req.params;
-        const size = typeof req.query.size === "string" ? req.query.size : undefined;
-        if (!itemId || !size) return res.status(400).json({ success: false, message: "Product and size are required" });
+        const size = typeof req.query.size === "string" ? req.query.size.trim() : undefined;
+        const normalizedSize = size;
+        if (!itemId || !mongoose.isValidObjectId(itemId) || !normalizedSize) return res.status(400).json({ success: false, message: "Product and size are required" });
 
         const cart = await Cart.findOne({ user: req.user.id });
         if (!cart) return res.status(404).json({ success: false, message: "Cart not found" });
 
         const originalLength = cart.items.length;
         cart.items = cart.items.filter(
-            item => !(item.product.toString() === itemId && item.size === size)
+            item => !(item.product.toString() === itemId && item.size === normalizedSize)
         );
         if (cart.items.length === originalLength) {
             return res.status(404).json({ success: false, message: "Item not found in cart" });

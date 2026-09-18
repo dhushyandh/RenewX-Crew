@@ -6,26 +6,37 @@ import { clerkClient } from "@clerk/express";
 const makeAdmin = async () => {
     try {
         await connectDB();
-        const email = process.env.ADMIN_EMAIL;
+
+        const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+
         if (!email) {
-            console.error("❌ ADMIN_EMAIL environment variable is not set");
-            return;
+            throw new Error("ADMIN_EMAIL environment variable is not set");
         }
 
-        const user = await User.findOneAndUpdate({ email }, { role: 'admin' }, { new: true });
+        const user = await User.findOne({ email });
 
         if (!user) {
-            console.error(`❌ User with email ${email} not found`);
-                return;
+            throw new Error(`User with email ${email} not found`);
         }
 
-        await clerkClient.users.updateUserMetadata(user.clerkId as string, {
-            publicMetadata: { role: 'admin' }
+        if (!user.clerkId) {
+            throw new Error(`User ${email} has no Clerk ID`);
+        }
+
+        user.role = "admin";
+        await user.save();
+
+        await clerkClient.users.updateUserMetadata(user.clerkId, {
+            publicMetadata: { role: "admin" },
         });
+
         console.log(`✅ User ${email} is now an admin`);
     } catch (error) {
         console.error("❌ Error making user admin:", error);
+        process.exitCode = 1;
+    } finally {
+        await import("mongoose").then(({ default: mongoose }) => mongoose.connection.close());
     }
-}
+};
 
-export default makeAdmin;
+makeAdmin();

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -15,6 +15,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useAuth } from "@clerk/expo";
+
+import api, { getAuthHeaders } from "@/constants/api";
 
 import { useCart } from "../../context/CartContext";
 
@@ -36,6 +39,43 @@ type PaymentMethod = "cod" | "card" | "upi";
 export default function Checkout() {
     const router = useRouter();
     const { cartItems } = useCart();
+    const { getToken } = useAuth();
+
+    const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
+    const [loadingSavedAddress, setLoadingSavedAddress] = useState(true);
+
+    useEffect(() => {
+        let mounted = true;
+        const loadSavedAddresses = async () => {
+            try {
+                const authConfig = await getAuthHeaders(getToken);
+                const response = await api.get("/addresses", authConfig);
+                const items = Array.isArray(response.data?.data) ? response.data.data : [];
+                if (!mounted) return;
+                setSavedAddresses(items);
+                const selected = items.find((item: any) => item.isDefault) ?? items[0];
+                if (selected) {
+                    setAddress(selected.street ?? "");
+                    setCity(selected.city ?? "");
+                    setState(selected.state ?? "");
+                    setPincode(selected.zipCode ?? "");
+                }
+            } catch (error) {
+                console.warn("Could not load saved addresses:", error);
+            } finally {
+                if (mounted) setLoadingSavedAddress(false);
+            }
+        };
+        loadSavedAddresses();
+        return () => { mounted = false; };
+    }, [getToken]);
+
+    const applySavedAddress = (selected: any) => {
+        setAddress(selected.street ?? "");
+        setCity(selected.city ?? "");
+        setState(selected.state ?? "");
+        setPincode(selected.zipCode ?? "");
+    };
 
     const [fullName, setFullName] = useState("");
     const [phone, setPhone] = useState("");
@@ -401,6 +441,35 @@ export default function Checkout() {
                                 </Text>
                             </View>
                         </View>
+
+                        {savedAddresses.length > 0 && (
+                            <View style={styles.savedAddressCard}>
+                                <View style={styles.savedAddressHeader}>
+                                    <View style={styles.savedAddressHeaderText}>
+                                        <Text style={styles.savedAddressTitle}>Saved address</Text>
+                                        <Text style={styles.savedAddressSubtitle}>
+                                            {loadingSavedAddress ? "Loading..." : "Select an address from your account"}
+                                        </Text>
+                                    </View>
+                                    <Pressable onPress={() => router.push("/addresses")} style={styles.manageAddressButton}>
+                                        <Text style={styles.manageAddressText}>Manage</Text>
+                                    </Pressable>
+                                </View>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.savedAddressList}>
+                                    {savedAddresses.map((item) => (
+                                        <Pressable key={String(item._id)} onPress={() => applySavedAddress(item)} style={styles.savedAddressOption}>
+                                            <Ionicons name={item.isDefault ? "checkmark-circle" : "location-outline"} size={18} color={COLORS.black} />
+                                            <View style={styles.savedAddressOptionText}>
+                                                <Text style={styles.savedAddressOptionTitle}>{item.type ?? "Address"}</Text>
+                                                <Text numberOfLines={2} style={styles.savedAddressOptionBody}>
+                                                    {item.street}, {item.city}, {item.state} - {item.zipCode}
+                                                </Text>
+                                            </View>
+                                        </Pressable>
+                                    ))}
+                                </ScrollView>
+                            </View>
+                        )}
 
                         <View style={styles.card}>
                             {/* FULL NAME */}
@@ -1292,6 +1361,26 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: COLORS.secondary,
     },
+
+    savedAddressCard: {
+        backgroundColor: COLORS.white,
+        borderRadius: 17,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        padding: 14,
+        marginBottom: 12,
+    },
+    savedAddressHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+    savedAddressHeaderText: { flex: 1 },
+    savedAddressTitle: { fontSize: 13, fontWeight: "800", color: COLORS.text },
+    savedAddressSubtitle: { marginTop: 3, fontSize: 10, color: COLORS.secondary },
+    manageAddressButton: { paddingHorizontal: 10, paddingVertical: 7 },
+    manageAddressText: { fontSize: 11, fontWeight: "700", color: COLORS.text },
+    savedAddressList: { gap: 9, paddingTop: 11 },
+    savedAddressOption: { width: 190, minHeight: 72, padding: 11, borderRadius: 13, borderWidth: 1, borderColor: COLORS.border, flexDirection: "row", alignItems: "flex-start" },
+    savedAddressOptionText: { flex: 1, marginLeft: 8 },
+    savedAddressOptionTitle: { fontSize: 11, fontWeight: "800", color: COLORS.text },
+    savedAddressOptionBody: { marginTop: 4, fontSize: 10, lineHeight: 14, color: COLORS.secondary },
 
     /* FORM */
 

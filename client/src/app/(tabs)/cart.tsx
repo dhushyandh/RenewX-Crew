@@ -264,7 +264,7 @@ export default function Cart() {
                     </Text>
 
                     <Text className="text-sm font-semibold text-primary">
-                        ${subtotal.toFixed(2)}
+                        ₹₹${subtotal.toFixed(2)}
                     </Text>
                 </View>
 

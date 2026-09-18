@@ -5,7 +5,8 @@
   "scripts": {
     "start": "tsx server.ts",
     "server": "nodemon --exec tsx server.ts",
-    "build": "tsc"
+    "build": "tsc",
+    "admin": "tsx scripts/makeAdmin.ts"
   },
   "type": "module",
   "keywords": [],

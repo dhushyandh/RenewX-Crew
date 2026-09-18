@@ -43,7 +43,7 @@ export const registerPushToken = async (req: Request, res: Response) => {
                 platform: ["android", "ios", "web"].includes(platform) ? platform : "android",
                 enabled: true,
             },
-            { upsert: true, new: true, setDefaultsOnInsert: true }
+            { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
         );
 
         return res.status(200).json({
@@ -169,7 +169,7 @@ export const updatePreferences = async (req: Request, res: Response) => {
         const preferences = await NotificationPreference.findOneAndUpdate(
             { userId: String(userId) },
             { ...updateData, userId: String(userId) },
-            { upsert: true, new: true, setDefaultsOnInsert: true }
+            { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
         );
 
         return res.status(200).json({
@@ -191,78 +191,88 @@ export const updatePreferences = async (req: Request, res: Response) => {
 };
 
 /**
- * Send a test push notification.
- * Works seamlessly in production:
- * 1. Supports direct token in body: { token: "ExponentPushToken[...]" }
- * 2. Supports authenticated user's registered tokens
- * 3. Falls back to latest active token in database for diagnostic verification
+ * Send a test push notification to the authenticated admin's registered devices.
  * POST /api/notifications/test
+ *
+ * This endpoint intentionally does not accept arbitrary push tokens. Admins can
+ * only test devices already registered to their own account.
  */
 export const sendTestNotification = async (req: Request, res: Response) => {
     try {
-        const { token, title, body } = req.body || {};
         const user = (req as any).user;
         const userId = user?.clerkId || user?.id || user?._id?.toString();
 
-        let targetTokens: string[] = [];
-
-        if (token && isExpoPushToken(token)) {
-            targetTokens = [token];
-        } else if (userId) {
-            const userTokens = await PushToken.find({ userId: String(userId), enabled: true });
-            targetTokens = userTokens.map((t) => t.token);
-        }
-
-        // Production diagnostic fallback: check latest active token in DB if none resolved yet
-        if (targetTokens.length === 0) {
-            const latestTokenDoc = await PushToken.findOne({ enabled: true }).sort({ updatedAt: -1 });
-            if (latestTokenDoc?.token) {
-                targetTokens = [latestTokenDoc.token];
-            }
-        }
-
-        if (targetTokens.length === 0) {
-            return res.status(404).json({
+        if (!userId) {
+            return res.status(401).json({
                 success: false,
-                message: "No active Expo push tokens found. Pass { token: 'ExponentPushToken[...]' } or register a device first.",
+                message: "User authentication required",
             });
         }
 
-        const messages = targetTokens.map((t) => ({
-            to: t,
+        const userTokens = await PushToken.find({
+            userId: String(userId),
+            enabled: true,
+        }).select("token platform");
+
+        if (userTokens.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "No active Expo push tokens found for your account. Register a device first.",
+            });
+        }
+
+        const { title, body } = req.body || {};
+
+        const messages = userTokens.map((device) => ({
+            to: device.token,
             sound: "default" as const,
             channelId: "renewx-general",
             priority: "high" as const,
-            title: title || "RenewX Push Notification Test 🚀",
-            body: body || "Your device is successfully connected to the RenewX Push Notification Service!",
-            data: { type: "TEST_NOTIFICATION", timestamp: Date.now() },
+            title:
+                typeof title === "string" && title.trim()
+                    ? title.trim().slice(0, 100)
+                    : "RenewX Push Notification Test 🚀",
+            body:
+                typeof body === "string" && body.trim()
+                    ? body.trim().slice(0, 500)
+                    : "Your device is successfully connected to the RenewX Push Notification Service!",
+            data: {
+                type: "TEST_NOTIFICATION",
+                timestamp: Date.now(),
+            },
         }));
 
         const result = await sendPushNotifications(messages);
         const tickets = result?.data || [];
-        const allFailed = tickets.length > 0 && tickets.every((t: any) => t.status === "error");
+        const allFailed =
+            tickets.length > 0 &&
+            tickets.every((ticket: any) => ticket.status === "error");
 
         if (allFailed) {
-            const errDetail = tickets[0];
+            const firstError = tickets[0];
+
             return res.status(400).json({
                 success: false,
-                message: errDetail.details?.error === "DeviceNotRegistered"
-                    ? "Target device is not registered on Expo. Please register an active physical device first."
-                    : (errDetail.message || "Expo could not deliver push notification."),
-                details: errDetail,
+                message:
+                    firstError.details?.error === "DeviceNotRegistered"
+                        ? "A registered device is no longer available. Please register the device again."
+                        : firstError.message || "Expo could not deliver the push notification.",
             });
         }
 
         return res.status(200).json({
             success: true,
-            message: `Test push sent to ${targetTokens.length} device(s)`,
-            tokens: targetTokens,
-            result,
+            message: `Test push sent to ${messages.length} registered device(s)`,
+            result: {
+                tickets,
+            },
         });
-    } catch (error: any) {
+    } catch (error) {
+        console.error("Error sending test push notification:", error);
+
         return res.status(500).json({
             success: false,
-            message: error.message || "Failed to send test push notification",
+            message: "Failed to send test push notification",
         });
     }
 };
