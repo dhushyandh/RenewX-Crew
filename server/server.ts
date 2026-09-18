@@ -2,9 +2,9 @@ import "dotenv/config";
 import express, { Request, Response, NextFunction } from 'express';
 import cors from "cors";
 import helmet from "helmet";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import connectDB from "./config/db.js";
-import { clerkMiddleware } from '@clerk/express'
+import { clerkMiddleware, getAuth } from '@clerk/express'
 import { clerkWebhook } from "./controllers/webhooks.js";
 import makeAdmin from "./scripts/makeAdmin.js";
 import productRoutes from "./routes/productsRoutes.js";
@@ -18,6 +18,11 @@ import { razorpayWebhook } from "./controllers/paymentWebhook.js";
 
 const app = express();
 
+// Render/reverse proxies must be trusted so rate limiting sees the real
+// client address instead of treating every request as one proxy IP.
+app.set("trust proxy", 1);
+
+// Webhooks must receive the untouched request body for signature verification.
 app.post('/api/clerk', express.raw({ type: 'application/json' }), clerkWebhook);
 app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), razorpayWebhook);
 
@@ -80,11 +85,28 @@ app.use(cors({
 // Limit JSON payloads to reduce accidental/malicious memory usage.
 app.use(express.json({ limit: "1mb" }));
 
+// Clerk is initialized before rate limiting so authenticated requests can be
+// bucketed per Clerk user. This avoids one shared NAT/proxy IP exhausting the
+// limit for every user of the application.
+app.use(clerkMiddleware());
+
+const rateLimitKey = (req: Request) => {
+    const userId = getAuth(req)?.userId;
+
+    if (userId) {
+        return `user:${userId}`;
+    }
+
+    return `ip:${ipKeyGenerator(req.ip || "unknown")}`;
+};
+
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    limit: 300,
+    limit: 1000,
     standardHeaders: "draft-8",
     legacyHeaders: false,
+    keyGenerator: rateLimitKey,
+    skip: (req) => req.path === "/health",
     message: {
         success: false,
         message: "Too many requests. Please try again later.",
@@ -102,8 +124,6 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     }
     next(err);
 });
-
-app.use(clerkMiddleware());
 
 app.get("/health", (req: Request, res: Response) => {
     return res.status(200).json({ success: true, status: "ok" });
