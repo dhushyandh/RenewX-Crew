@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { Request, Response } from "express";
 import Order from "../models/order.js";
 import Cart from "../models/cart.js";
@@ -62,8 +63,9 @@ export const getOrder = async (req: Request, res: Response) => {
     }
 };
 
-// Create order -> POST /api/orders
-export const createOrder = async (req: Request, res: Response) => {
+// export const createOrder = async (req: Request, res: Response) => {
+    const session = await mongoose.startSession();
+
     try {
         const userId = (req as any).user?.id || (req as any).user?._id;
         if (!userId) {
@@ -97,8 +99,7 @@ export const createOrder = async (req: Request, res: Response) => {
             });
         }
 
-        // Online payments must be verified by the payment provider webhook.
-        // The client is never allowed to mark an order as paid.
+        // Stripe payment completion is controlled by the server/webhook.
         if (paymentMethod === "stripe" && !paymentIntentId) {
             return res.status(400).json({
                 success: false,
@@ -106,9 +107,10 @@ export const createOrder = async (req: Request, res: Response) => {
             });
         }
 
-        const sourceItems: any[] = Array.isArray(directItems) && directItems.length > 0
-            ? directItems
-            : ((await Cart.findOne({ user: userId }).lean())?.items || []);
+        const sourceItems: any[] =
+            Array.isArray(directItems) && directItems.length > 0
+                ? directItems
+                : ((await Cart.findOne({ user: userId }).lean())?.items || []);
 
         if (sourceItems.length === 0) {
             return res.status(400).json({
@@ -120,10 +122,10 @@ export const createOrder = async (req: Request, res: Response) => {
         const orderItems: any[] = [];
         let subtotal = 0;
 
-        // IMPORTANT: Product price, name, size and stock are authoritative on
-        // the server. Never trust price/name/quantity totals supplied by mobile.
+        // Read authoritative product data from MongoDB.
         for (const item of sourceItems) {
-            const productId = item.productId || item.product?._id || item.product;
+            const productId =
+                item.productId || item.product?._id || item.product;
 
             if (!productId) {
                 return res.status(400).json({
@@ -170,6 +172,7 @@ export const createOrder = async (req: Request, res: Response) => {
             }
 
             const price = Number(product.price);
+
             orderItems.push({
                 product: product._id,
                 name: product.name,
@@ -181,81 +184,121 @@ export const createOrder = async (req: Request, res: Response) => {
             subtotal += price * quantity;
         }
 
-        // Pricing is calculated entirely on the server.
+        // Never accept shipping, tax, subtotal, or total from the client.
         const shippingCost = subtotal >= 1000 ? 0 : 80;
         const tax = 0;
         const totalAmount = subtotal + shippingCost + tax;
 
-        // Atomically reserve/decrement stock. If any item cannot be reserved,
-        // the order is rejected instead of silently creating an under-stocked order.
-        for (const item of orderItems) {
-            const updated = await Product.findOneAndUpdate(
-                {
-                    _id: item.product,
-                    isActive: true,
-                    stock: { $gte: item.quantity },
-                },
-                { $inc: { stock: -item.quantity } },
-                { new: true }
+        let order: any;
+
+        await session.withTransaction(async () => {
+            // Atomic stock reservation/decrement for every item.
+            // The transaction guarantees that a failure rolls back all
+            // decrements rather than leaving partially reduced stock.
+            for (const item of orderItems) {
+                const updated = await Product.findOneAndUpdate(
+                    {
+                        _id: item.product,
+                        isActive: true,
+                        stock: { $gte: item.quantity },
+                    },
+                    { $inc: { stock: -item.quantity } },
+                    { new: true, session }
+                );
+
+                if (!updated) {
+                    throw new Error(
+                        `INSUFFICIENT_STOCK:${item.name}`
+                    );
+                }
+            }
+
+            const orderNumber =
+                `ORD-${Date.now()}-${Math.random()
+                    .toString(36)
+                    .slice(2, 8)
+                    .toUpperCase()}`;
+
+            const created = await Order.create(
+                [{
+                    user: userId,
+                    items: orderItems,
+                    shippingAddress,
+                    paymentMethod,
+                    paymentStatus: "pending",
+                    orderStatus: "placed",
+                    totalAmount,
+                    subtotal,
+                    tax,
+                    shippingCost,
+                    notes,
+                    paymentIntentId:
+                        paymentMethod === "stripe"
+                            ? paymentIntentId
+                            : undefined,
+                    orderNumber,
+                }],
+                { session }
             );
 
-            if (!updated) {
-                return res.status(409).json({
-                    success: false,
-                    message: `Insufficient stock for ${item.name}. Please refresh your cart and try again.`,
-                });
-            }
-        }
+            order = created[0];
 
-        const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-
-        const order: any = await Order.create({
-            user: userId,
-            items: orderItems,
-            shippingAddress,
-            paymentMethod,
-            // Payment completion is controlled by the server/webhook.
-            paymentStatus: paymentMethod === "cash" ? "pending" : "pending",
-            orderStatus: "placed",
-            totalAmount,
-            subtotal,
-            tax,
-            shippingCost,
-            notes,
-            paymentIntentId: paymentMethod === "stripe" ? paymentIntentId : undefined,
-            orderNumber,
+            // Clear the cart in the same transaction as the order and stock
+            // update, preventing an order from being created while the cart
+            // remains populated after a successful transaction.
+            await Cart.updateOne(
+                { user: userId },
+                { $set: { items: [], totalAmount: 0 } },
+                { session }
+            );
         });
-
-        // Only clear the cart after the order itself has been created.
-        await Cart.findOneAndUpdate(
-            { user: userId },
-            { items: [], totalAmount: 0 }
-        );
 
         sendOrderPushNotification({
             userId: (req as any).user?.clerkId || String(userId),
             orderId: order._id.toString(),
             orderNumber: order.orderNumber,
             status: "placed",
-        }).catch((err) => console.warn("Order placement push error:", err));
+        }).catch((err) =>
+            console.warn("Order placement push error:", err)
+        );
 
         sendAdminNewOrderNotification({
             orderId: order._id.toString(),
             orderNumber: order.orderNumber,
             totalAmount,
             customerName: (req as any).user?.name || "Customer",
-        }).catch((err) => console.warn("Admin order alert push error:", err));
+        }).catch((err) =>
+            console.warn("Admin order alert push error:", err)
+        );
 
         return res.status(201).json({
             success: true,
             message: "Order placed successfully",
             order,
         });
-    } catch (error) {
+    } catch (error: any) {
+        if (error?.message?.startsWith("INSUFFICIENT_STOCK:")) {
+            return res.status(409).json({
+                success: false,
+                message: `Insufficient stock for ${error.message.replace(
+                    "INSUFFICIENT_STOCK:",
+                    ""
+                )}. Please refresh your cart and try again.`,
+            });
+        }
+
         console.error("Create order error:", error);
+
         return res.status(500).json({
             success: false,
             message: "Failed to create order",
+        });
+    } finally {
+        await session.endSession();
+    }
+};
+
+te order",
         });
     }
 };
