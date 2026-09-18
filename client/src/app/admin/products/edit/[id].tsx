@@ -121,39 +121,72 @@ export default function EditProduct() {
         try {
             setSubmitting(true);
             const token = await getToken();
-            const formData = new FormData();
+            const authHeaders = token
+                ? { Authorization: `Bearer ${token}` }
+                : {};
 
-            formData.append("name", name);
-            formData.append("description", description);
-            formData.append("price", price);
-            formData.append("stock", stock || '0');
-            formData.append("category", category);
-            formData.append("isFeatured", String(isFeatured));
-            formData.append("sizes", sizes);
+            // IMPORTANT: When no new files are selected, use JSON instead of
+            // multipart/form-data. This avoids invoking Multer for a normal
+            // product edit and removes a common source of browser/XHR hangs.
+            if (newImages.length === 0) {
+                await api.put(
+                    `/products/${id}`,
+                    {
+                        name,
+                        description,
+                        price: Number(price),
+                        stock: Number(stock || 0),
+                        category,
+                        isFeatured,
+                        sizes,
+                        existingImages,
+                    },
+                    {
+                        headers: {
+                            ...authHeaders,
+                            "Content-Type": "application/json",
+                        },
+                        timeout: 30000,
+                    }
+                );
+            } else {
+                const formData = new FormData();
 
-            // Append existing images
-            existingImages.forEach((img) => {
-                formData.append("existingImages", img);
-            });
+                formData.append("name", name);
+                formData.append("description", description);
+                formData.append("price", price);
+                formData.append("stock", stock || "0");
+                formData.append("category", category);
+                formData.append("isFeatured", String(isFeatured));
+                formData.append("sizes", sizes);
 
-            // Append new images
-            for (const [i, uri] of newImages.entries()) {
-                const filename = `new-image-${i}.jpg`;
-                if (Platform.OS === "web") {
-                    const res = await fetch(uri);
-                    const blob = await res.blob();
-                    formData.append("images", blob, filename);
-                } else {
-                    formData.append("images", { uri, name: filename, type: "image/jpeg" } as any);
+                existingImages.forEach((img) => {
+                    formData.append("existingImages", img);
+                });
+
+                for (const [i, uri] of newImages.entries()) {
+                    const filename = `new-image-${i}.jpg`;
+                    if (Platform.OS === "web") {
+                        const res = await fetch(uri);
+                        if (!res.ok) {
+                            throw new Error(`Could not read selected image (HTTP ${res.status}).`);
+                        }
+                        const blob = await res.blob();
+                        formData.append("images", blob, filename);
+                    } else {
+                        formData.append("images", {
+                            uri,
+                            name: filename,
+                            type: "image/jpeg",
+                        } as any);
+                    }
                 }
+
+                await api.put(`/products/${id}`, formData, {
+                    headers: authHeaders,
+                    timeout: 60000,
+                });
             }
-
-            // Call API: PUT /products/:id
-            await api.put(`/products/${id}`, formData, {
-                headers: {
-                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-                }
-            });
 
             Toast.show({
                 type: 'success',
