@@ -68,7 +68,7 @@ export const getOrder = async (req: Request, res: Response) => {
     }
 };
 
-// export const createOrder = async (req: Request, res: Response) => {
+export const createOrder = async (req: Request, res: Response) => {
     const session = await mongoose.startSession();
 
     try {
@@ -362,11 +362,7 @@ export const getOrder = async (req: Request, res: Response) => {
     }
 };
 
-te order",
-        });
-    }
-};
-
+    
 // Update order status -> PUT /api/orders/:id/status
 export const updateOrderStatus = async (req: Request, res: Response) => {
     try {
