@@ -9,6 +9,7 @@ export const getProducts = async (req: Request, res: Response) => {
         const query: any = { isActive: true };
 
         if (category && category !== 'All' && category !== 'all') {
+            const safeCategory = String(category).replace(/[.*+?^$\\{}()|[\\]\\]/g, '\\        if (category && category !== 'All' && category !== 'all') {
             query.category = { $regex: new RegExp(`^${category}$`, 'i') };
         }
 
@@ -17,6 +18,37 @@ export const getProducts = async (req: Request, res: Response) => {
                 { name: { $regex: search as string, $options: 'i' } },
                 { description: { $regex: search as string, $options: 'i' } }
             ];
+        }');
+            query.category = { $regex: new RegExp(`^${safeCategory}import { Request, Response } from "express";
+import Product from "../models/Products.js";
+import cloudinary from "../config/cloudinary.js";
+
+// Get all products -> Get /api/products?page=1&limit=10
+export const getProducts = async (req: Request, res: Response) => {
+    try {
+        const { page = 1, limit = 50, category, search } = req.query;
+        const query: any = { isActive: true };
+
+, 'i') };
+        }
+
+        if (search) {
+            const safeSearch = String(search).trim().slice(0, 100).replace(/[.*+?^$\\{}()|[\\]\\]/g, '\\        if (category && category !== 'All' && category !== 'all') {
+            query.category = { $regex: new RegExp(`^${category}$`, 'i') };
+        }
+
+        if (search) {
+            query.$or = [
+                { name: { $regex: search as string, $options: 'i' } },
+                { description: { $regex: search as string, $options: 'i' } }
+            ];
+        }');
+            if (safeSearch) {
+                query.$or = [
+                    { name: { $regex: safeSearch, $options: 'i' } },
+                    { description: { $regex: safeSearch, $options: 'i' } }
+                ];
+            }
         }
 
         const pageNumber = Math.max(1, Number(page) || 1);
@@ -26,11 +58,12 @@ export const getProducts = async (req: Request, res: Response) => {
         // Run count and data query in parallel. lean() avoids the overhead of
         // creating full Mongoose documents for a read-only product listing.
         const [total, products] = await Promise.all([
-            Product.countDocuments(query),
+            Product.countDocuments(query).maxTimeMS(8000),
             Product.find(query)
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limitNumber)
+                .maxTimeMS(8000)
                 .lean(),
         ]);
 
@@ -40,9 +73,12 @@ export const getProducts = async (req: Request, res: Response) => {
             pagination: { total, page: pageNumber, pages: Math.ceil(total / limitNumber) }
         })
     } catch (error: any) {
-        return res.status(500).json({
+        console.error("Error fetching products:", error);
+        return res.status(error?.code === 50 ? 503 : 500).json({
             success: false,
-            message: error.message
+            message: error?.code === 50
+                ? "Product service is temporarily busy. Please try again shortly."
+                : "Failed to fetch products"
         })
     }
 }
@@ -50,7 +86,7 @@ export const getProducts = async (req: Request, res: Response) => {
 // Get single product -> Get /api/v1/product/:id
 export const getProduct = async (req: Request, res: Response) => {
     try {
-        const product = await Product.findById(req.params.id)
+        const product = await Product.findById(req.params.id).maxTimeMS(8000)
 
         if (!product) {
             return res.status(404).json({
