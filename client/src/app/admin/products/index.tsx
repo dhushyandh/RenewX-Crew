@@ -1,5 +1,5 @@
-import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import { ScrollView, Text, TouchableOpacity, View, ActivityIndicator, RefreshControl, Image, Alert, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS } from "@/constants";
@@ -32,9 +32,11 @@ export default function AdminProducts() {
         }
     };
 
-    useEffect(() => {
-        fetchProducts();
-    }, []);
+    useFocusEffect(
+        useCallback(() => {
+            fetchProducts();
+        }, [])
+    );
 
     const onRefresh = () => {
         setRefreshing(true);
@@ -118,8 +120,8 @@ export default function AdminProducts() {
                         <Text className="text-secondary">No products found</Text>
                     </View>
                 ) : (
-                    products.map((product: any) => (
-                        <View key={product._id} className="bg-white p-3 rounded-lg border border-gray-100 mb-3 flex-row items-center">
+                    products.map((product: any, index: number) => (
+                        <View key={product._id ? `${product._id}-${index}` : String(index)} className="bg-white p-3 rounded-lg border border-gray-100 mb-3 flex-row items-center">
                             <Image
                                 source={{ uri: product.images && product.images.length > 0 ? product.images[0] : 'https://via.placeholder.com/150' }}
                                 className="w-16 h-16 rounded-lg bg-gray-100 mr-3"

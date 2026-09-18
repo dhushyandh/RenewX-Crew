@@ -1,13 +1,14 @@
-import { View, Text, ScrollView, Image, Dimensions, TouchableOpacity, ActivityIndicator } from 'react-native'
-import React, { useEffect, useState } from 'react'
+import { View, Text, ScrollView, Image, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native'
+import React, { useCallback, useEffect, useState } from 'react'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Header from '../../../components/Header'
 import { BANNERS, dummyProducts } from '@/assets/assets'
-import { useRouter } from 'expo-router'
+import { useFocusEffect, useRouter } from 'expo-router'
 import { CATEGORIES } from '@/constants'
 import CategoryItem from '../../../components/CategoryItem'
 import { Product } from '@/constants/types'
 import ProductItem from '../../../components/ProductItem'
+import api from '@/constants/api'
 
 const { width } = Dimensions.get('window')
 
@@ -17,23 +18,48 @@ export default function Home() {
     const [activeBannerIndex, setActiveBannerIndex] = useState(0)
     const [activeCategory, setActiveCategory] = useState('all')
     const [products, setProducts] = useState<Product[]>([]);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
 
     const categories = [{ id: 'all', name: 'All', icon: 'grid' }, ...CATEGORIES]
-    const fetchProducts = async () => {
-        setProducts(dummyProducts);
-        setLoading(false)
-    }
 
-    useEffect(() => {
-        fetchProducts()
-    }, [])
+    const fetchProducts = async () => {
+        try {
+            const { data } = await api.get('/products?limit=20');
+            if (data.success && data.data && data.data.length > 0) {
+                setProducts(data.data);
+            } else {
+                setProducts(dummyProducts as any);
+            }
+        } catch (error) {
+            console.log('Failed to fetch products from API, fallback to dummy products:', error);
+            setProducts(dummyProducts as any);
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    };
+
+    useFocusEffect(
+        useCallback(() => {
+            fetchProducts();
+        }, [])
+    );
+
+    const onRefresh = () => {
+        setRefreshing(true);
+        fetchProducts();
+    };
 
     return (
         <SafeAreaView className="flex-1 bg-white" edges={['top']}>
             <Header title='Forever' showMenu showCart showLogo />
 
-            <ScrollView className='flex-1 px-4' showsVerticalScrollIndicator={false}>
+            <ScrollView
+                className='flex-1 px-4'
+                showsVerticalScrollIndicator={false}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            >
                 {/* Banner slider */}
                 <View className='mb-6'>
                     <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}
@@ -93,8 +119,8 @@ export default function Home() {
                         <ActivityIndicator size='large' />
                     ) : (
                         <View className='flex-row flex-wrap justify-between'>
-                            {products.slice(0, 8).map((product) => (
-                                <ProductItem key={product._id} product={product} />
+                            {products.slice(0, 8).map((product, index) => (
+                                <ProductItem key={product._id ? `${product._id}-${index}` : String(index)} product={product} />
                             ))}
                         </View>
                     )}

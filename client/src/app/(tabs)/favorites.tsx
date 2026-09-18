@@ -147,9 +147,9 @@ export default function Favorites() {
                     paddingBottom: 30,
                 }}
             >
-                {wishlist.map((product) => (
+                {wishlist.map((product, index) => (
                     <FavoriteItem
-                        key={product._id}
+                        key={product._id ? `${product._id}-${index}` : String(index)}
                         product={product}
                     />
                 ))}

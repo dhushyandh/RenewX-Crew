@@ -4,12 +4,12 @@ import React, {
     useEffect,
     useState,
     useCallback,
-    useRef,
 } from "react";
-import * as Notifications from "expo-notifications";
+import { useAuth } from "@clerk/expo";
 import {
     configureNotifications,
-    registerPushToken,
+    registerForPushNotificationsAsync,
+    registerPushTokenWithBackend,
     requestNotificationPermission,
     addNotificationToHistory,
     getNotificationSettings,
@@ -17,8 +17,10 @@ import {
     getNotificationHistory,
     markAllNotificationsRead,
     clearNotificationHistory,
+    setupNotificationListeners,
     type NotificationSettings,
     type NotificationHistoryItem,
+    DEFAULT_SETTINGS,
 } from "../services/notifications";
 
 type NotificationContextValue = {
@@ -36,13 +38,8 @@ type NotificationContextValue = {
 
 const NotificationContext = createContext<NotificationContextValue | undefined>(undefined);
 
-const DEFAULT_SETTINGS: NotificationSettings = {
-    orderUpdates: true,
-    offers: true,
-    general: true,
-};
-
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
+    const { isSignedIn, getToken } = useAuth();
     const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
     const [pushToken, setPushToken] = useState<string | null>(null);
     const [settings, setSettings] = useState<NotificationSettings>(DEFAULT_SETTINGS);
@@ -52,9 +49,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         body: string;
         data?: Record<string, any>;
     } | null>(null);
-
-    const receivedListener = useRef<Notifications.Subscription | null>(null);
-    const responseListener = useRef<Notifications.Subscription | null>(null);
 
     const refreshHistory = useCallback(async () => {
         const items = await getNotificationHistory();
@@ -72,56 +66,53 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             setPermissionGranted(granted);
 
             if (granted) {
-                await registerPushToken();
-                const tokenData = await Notifications.getDevicePushTokenAsync();
-                if (mounted) setPushToken(tokenData.data ?? null);
+                const token = await registerForPushNotificationsAsync();
+                if (mounted && token) {
+                    setPushToken(token);
+                    if (isSignedIn) {
+                        await registerPushTokenWithBackend(token, () => getToken());
+                    }
+                }
             }
 
-            const stored = await getNotificationSettings();
+            const stored = await getNotificationSettings(isSignedIn ? () => getToken() : undefined);
             if (mounted) setSettings(stored);
 
             await refreshHistory();
         };
 
         init();
+    }, [isSignedIn]);
 
-        receivedListener.current = Notifications.addNotificationReceivedListener(
-            (notification) => {
+    useEffect(() => {
+        const cleanup = setupNotificationListeners({
+            onReceived: (notification) => {
                 setLastNotification({
-                    title: notification.request.content.title ?? "",
-                    body: notification.request.content.body ?? "",
-                    data: notification.request.content.data as any,
+                    title: notification?.request?.content?.title ?? "",
+                    body: notification?.request?.content?.body ?? "",
+                    data: notification?.request?.content?.data as any,
                 });
                 addNotificationToHistory(notification).then(refreshHistory);
             },
-        );
-
-        responseListener.current = Notifications.addNotificationResponseReceivedListener(
-            (response) => {
-                setLastNotification({
-                    title: response.notification.request.content.title ?? "",
-                    body: response.notification.request.content.body ?? "",
-                    data: response.notification.request.content.data as any,
-                });
-                addNotificationToHistory(response.notification).then(refreshHistory);
+            onResponse: (response) => {
+                const data = response?.notification?.request?.content?.data;
+                console.log("[Push Notification] Response received with data:", data);
             },
-        );
+        });
 
-        return () => {
-            if (receivedListener.current) {
-                Notifications.removeNotificationSubscription(receivedListener.current);
-            }
-            if (responseListener.current) {
-                Notifications.removeNotificationSubscription(responseListener.current);
-            }
-            mounted = false;
-        };
+        return cleanup;
     }, [refreshHistory]);
 
-    const updateSettings = useCallback(async (next: NotificationSettings) => {
-        setSettings(next);
-        await saveNotificationSettings(next);
-    }, []);
+    const updateSettings = useCallback(
+        async (newSettings: NotificationSettings) => {
+            setSettings(newSettings);
+            await saveNotificationSettings(
+                newSettings,
+                isSignedIn ? () => getToken() : undefined
+            );
+        },
+        [isSignedIn, getToken]
+    );
 
     const markAllRead = useCallback(async () => {
         await markAllNotificationsRead();
@@ -130,8 +121,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
     const clearHistory = useCallback(async () => {
         await clearNotificationHistory();
-        setHistory([]);
-    }, []);
+        await refreshHistory();
+    }, [refreshHistory]);
 
     const unreadCount = history.filter((item) => !item.read).length;
 
@@ -158,7 +149,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 export function useNotifications() {
     const context = useContext(NotificationContext);
     if (!context) {
-        throw new Error("useNotifications must be used within NotificationProvider");
+        throw new Error("useNotifications must be used within a NotificationProvider");
     }
     return context;
 }

@@ -13,7 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
 import { COLORS } from "@/constants";
-import { useNotifications } from "../../context/NotificationContext";
+import { useNotifications } from "../../../context/NotificationContext";
 
 export default function NotificationsScreen() {
     const router = useRouter();
@@ -135,7 +135,7 @@ export default function NotificationsScreen() {
                         </View>
                     ) : (
                         <View style={styles.listContainer}>
-                            {history.map((item, index) => (
+                            {history.map((item: any, index: number) => (
                                 <View
                                     key={item.id}
                                     style={[

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     View,
     Text,
@@ -8,13 +8,17 @@ import {
     Modal,
     Pressable,
     ScrollView,
+    RefreshControl,
+    ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
 
 import { Product } from "@/constants/types";
 import { dummyProducts } from "@/assets/assets";
 import { CATEGORIES, COLORS } from "@/constants";
+import api from "@/constants/api";
 
 import Header from "../../components/Header";
 import ProductCard from "../../components/ProductCard";
@@ -34,9 +38,47 @@ type PriceFilter =
     | "above-100";
 
 export default function Shop() {
-    const [searchQuery, setSearchQuery] = useState("");
+    const params = useLocalSearchParams<{ category?: string }>();
+    const [allProducts, setAllProducts] = useState<Product[]>(dummyProducts as any);
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
 
-    const [selectedCategory, setSelectedCategory] = useState("All");
+    const [searchQuery, setSearchQuery] = useState("");
+    const [selectedCategory, setSelectedCategory] = useState(params.category || "All");
+
+    useEffect(() => {
+        if (params.category) {
+            setSelectedCategory(params.category);
+        }
+    }, [params.category]);
+
+    const fetchProducts = async () => {
+        try {
+            const { data } = await api.get('/products?limit=100');
+            if (data.success && data.data && data.data.length > 0) {
+                setAllProducts(data.data);
+            } else {
+                setAllProducts(dummyProducts as any);
+            }
+        } catch (error) {
+            console.log('Failed to fetch products in Shop, using fallback:', error);
+            setAllProducts(dummyProducts as any);
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    };
+
+    useFocusEffect(
+        useCallback(() => {
+            fetchProducts();
+        }, [])
+    );
+
+    const onRefresh = () => {
+        setRefreshing(true);
+        fetchProducts();
+    };
 
     const [filterVisible, setFilterVisible] = useState(false);
 
@@ -93,17 +135,17 @@ export default function Shop() {
      * FILTER + SEARCH + SORT
      */
     const filteredProducts = useMemo(() => {
-        let products = dummyProducts.filter((product) => {
+        let products = allProducts.filter((product) => {
             // Search
             const query = searchQuery.trim().toLowerCase();
 
             const matchesSearch =
                 query.length === 0 ||
                 product.name.toLowerCase().includes(query) ||
-                product.description.toLowerCase().includes(query);
+                (product.description && product.description.toLowerCase().includes(query));
 
             // Category
-            const categoryName = product.category ?? "";
+            const categoryName = typeof product.category === 'object' ? (product.category as any)?.name : (product.category ?? "");
 
             const matchesCategory =
                 selectedCategory === "All" ||
@@ -412,9 +454,15 @@ export default function Shop() {
 
             <FlatList
                 data={filteredProducts}
-                keyExtractor={(item) => item._id}
+                keyExtractor={(item, index) => item._id ? `${item._id}-${index}` : String(index)}
                 numColumns={2}
                 showsVerticalScrollIndicator={false}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                    />
+                }
                 columnWrapperStyle={{
                     justifyContent: "space-between",
                     paddingHorizontal: 16,

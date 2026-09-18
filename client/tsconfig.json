@@ -14,6 +14,15 @@
       ],
       "@/assets/*": [
         "./assets/*"
+      ],
+      "@/services/*": [
+        "./services/*"
+      ],
+      "@/components/*": [
+        "./components/*"
+      ],
+      "@/context/*": [
+        "./context/*"
       ]
     }
   },
@@ -23,5 +32,14 @@
     ".expo/types/**/*.ts",
     "expo-env.d.ts",
     "nativewind-env.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "assets/addresses",
+    "assets/orders",
+    "assets/scripts",
+    "assets/types",
+    "assets/admin",
+    "assets/auth"
   ]
 }

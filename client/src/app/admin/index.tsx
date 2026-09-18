@@ -1,5 +1,5 @@
-import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import { ScrollView, Text, View, ActivityIndicator, RefreshControl } from "react-native";
 import { COLORS, getStatusColor } from "@/constants";
 import { dummyAdminStats } from "@/assets/assets";
@@ -56,9 +56,11 @@ export default function AdminDashboard() {
         }
     };
 
-    useEffect(() => {
-        fetchStats();
-    }, []);
+    useFocusEffect(
+        useCallback(() => {
+            fetchStats();
+        }, [])
+    );
 
     const onRefresh = () => {
         setRefreshing(true);

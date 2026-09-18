@@ -2,14 +2,26 @@ import { Request, Response } from "express";
 import Product from "../models/Products.js";
 import cloudinary from "../config/cloudinary.js";
 
-// Get all products -> Get /api/v1/product?page=1&limit=10
+// Get all products -> Get /api/products?page=1&limit=10
 export const getProducts = async (req: Request, res: Response) => {
     try {
-        const { page = 1, limit = 10 } = req.query;
-        const query: any = { isActive: true }
+        const { page = 1, limit = 50, category, search } = req.query;
+        const query: any = { isActive: true };
+
+        if (category && category !== 'All' && category !== 'all') {
+            query.category = { $regex: new RegExp(`^${category}$`, 'i') };
+        }
+
+        if (search) {
+            query.$or = [
+                { name: { $regex: search as string, $options: 'i' } },
+                { description: { $regex: search as string, $options: 'i' } }
+            ];
+        }
 
         const total = await Product.countDocuments(query);
         const products = await Product.find(query)
+            .sort({ createdAt: -1 })
             .skip((Number(page) - 1) * Number(limit))
             .limit(Number(limit));
 
@@ -53,31 +65,56 @@ export const createProduct = async (req: Request, res: Response) => {
     try {
         let images: string[] = [];
 
-        // Handle file uploads
+        // Handle file uploads with Cloudinary and fast timeout fallback
         if (req.files && (req.files as any).length > 0) {
             try {
                 const uploadPromises = (req.files as any).map((file: any) => {
-                    return new Promise<string>((resolve, reject) => {
-                        const uploadStream = cloudinary.uploader.upload_stream(
-                            { folder: 'ecommerce/products' },
-                            (error: any, result: any) => {
-                                if (error) {
-                                    console.error("Cloudinary upload error:", error);
-                                    reject(error);
-                                } else {
-                                    resolve(result!.secure_url);
-                                }
+                    return new Promise<string>((resolve) => {
+                        let isDone = false;
+                        const fallback = () => {
+                            if (!isDone) {
+                                isDone = true;
+                                const base64 = file.buffer.toString('base64');
+                                const mime = file.mimetype || 'image/jpeg';
+                                resolve(`data:${mime};base64,${base64}`);
                             }
-                        );
-                        uploadStream.end(file.buffer);
+                        };
+
+                        const timer = setTimeout(() => {
+                            console.log("Cloudinary upload timed out, using direct image buffer");
+                            fallback();
+                        }, 5000);
+
+                        try {
+                            const uploadStream = cloudinary.uploader.upload_stream(
+                                { folder: 'ecommerce/products' },
+                                (error: any, result: any) => {
+                                    clearTimeout(timer);
+                                    if (isDone) return;
+                                    isDone = true;
+                                    if (error || !result?.secure_url) {
+                                        console.error("Cloudinary upload error, using buffer:", error);
+                                        fallback();
+                                    } else {
+                                        resolve(result.secure_url);
+                                    }
+                                }
+                            );
+                            uploadStream.end(file.buffer);
+                        } catch (streamErr) {
+                            clearTimeout(timer);
+                            fallback();
+                        }
                     });
                 });
                 images = await Promise.all(uploadPromises);
             } catch (cloudErr: any) {
-                console.error("Cloudinary upload failed, using fallback:", cloudErr.message);
-                images = [
-                    "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80"
-                ];
+                console.error("Cloudinary upload failed, using uploaded file buffer directly:", cloudErr.message);
+                images = (req.files as any).map((file: any) => {
+                    const base64 = file.buffer.toString('base64');
+                    const mime = file.mimetype || 'image/jpeg';
+                    return `data:${mime};base64,${base64}`;
+                });
             }
         }
 
@@ -89,19 +126,16 @@ export const createProduct = async (req: Request, res: Response) => {
             }
         }
 
-        if (images.length === 0) {
-            images = [
-                "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80"
-            ];
-        }
-
         let sizes = req.body.sizes || [];
         if (typeof sizes === 'string') {
             sizes = sizes.split(',').map((s: string) => s.trim()).filter((s: string) => s !== '');
         }
         if (!Array.isArray(sizes)) sizes = [sizes];
 
-        const category = req.body.category || 'Other';
+        const validCategories = ['Men', 'Women', 'Kids', 'Shoes', 'Bags', 'Bag', 'Other'];
+        let category = req.body.category || 'Other';
+        const matchedCat = validCategories.find(c => c.toLowerCase() === String(category).toLowerCase());
+        category = matchedCat || 'Other';
 
         const productData = {
             ...req.body,
@@ -144,25 +178,54 @@ export const updateProduct = async (req: Request, res: Response) => {
         if (req.files && (req.files as any).length > 0) {
             try {
                 const uploadPromises = (req.files as any).map((file: any) => {
-                    return new Promise<string>((resolve, reject) => {
-                        const uploadStream = cloudinary.uploader.upload_stream(
-                            { folder: 'ecommerce/products' },
-                            (error: any, result: any) => {
-                                if (error) {
-                                    console.error("Cloudinary upload error in update:", error);
-                                    reject(error);
-                                } else {
-                                    resolve(result!.secure_url);
-                                }
+                    return new Promise<string>((resolve) => {
+                        let isDone = false;
+                        const fallback = () => {
+                            if (!isDone) {
+                                isDone = true;
+                                const base64 = file.buffer.toString('base64');
+                                const mime = file.mimetype || 'image/jpeg';
+                                resolve(`data:${mime};base64,${base64}`);
                             }
-                        );
-                        uploadStream.end(file.buffer);
+                        };
+
+                        const timer = setTimeout(() => {
+                            console.log("Cloudinary update upload timed out, using direct image buffer");
+                            fallback();
+                        }, 5000);
+
+                        try {
+                            const uploadStream = cloudinary.uploader.upload_stream(
+                                { folder: 'ecommerce/products' },
+                                (error: any, result: any) => {
+                                    clearTimeout(timer);
+                                    if (isDone) return;
+                                    isDone = true;
+                                    if (error || !result?.secure_url) {
+                                        console.error("Cloudinary upload error in update, using direct buffer:", error);
+                                        fallback();
+                                    } else {
+                                        resolve(result.secure_url);
+                                    }
+                                }
+                            );
+                            uploadStream.end(file.buffer);
+                        } catch (streamErr) {
+                            clearTimeout(timer);
+                            fallback();
+                        }
                     });
                 });
                 const newImages = await Promise.all(uploadPromises);
                 images = [...images, ...newImages];
             } catch (cloudErr: any) {
                 console.error("Cloudinary upload error in updateProduct:", cloudErr.message);
+                const newImages = (req.files as any).map((file: any) => {
+                    const base64 = file.buffer.toString('base64');
+                    const mime = file.mimetype || 'image/jpeg';
+                    return `data:${mime};base64,${base64}`;
+                });
+                images = [...images, ...newImages];
             }
         }
 
@@ -171,6 +234,12 @@ export const updateProduct = async (req: Request, res: Response) => {
         if (req.body.price !== undefined) updates.price = Number(req.body.price);
         if (req.body.stock !== undefined) updates.stock = Number(req.body.stock);
         if (req.body.isFeatured !== undefined) updates.isFeatured = req.body.isFeatured === 'true' || req.body.isFeatured === true;
+
+        if (req.body.category) {
+            const validCategories = ['Men', 'Women', 'Kids', 'Shoes', 'Bags', 'Bag', 'Other'];
+            const matchedCat = validCategories.find(c => c.toLowerCase() === String(req.body.category).toLowerCase());
+            updates.category = matchedCat || 'Other';
+        }
 
         let sizes = req.body.sizes || req.body.size;
         if (sizes) {

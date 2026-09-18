@@ -14,7 +14,7 @@ import { useRouter } from "expo-router";
 import { useClerk, useUser } from "@clerk/expo";
 
 import { COLORS } from "@/constants";
-import { useNotifications } from "../../context/NotificationContext";
+import { useNotifications } from "../../../context/NotificationContext";
 
 export default function Settings() {
     const router = useRouter();

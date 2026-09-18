@@ -140,8 +140,9 @@ export default function EditProduct() {
             for (const [i, uri] of newImages.entries()) {
                 const filename = `new-image-${i}.jpg`;
                 if (Platform.OS === "web") {
-                    const blob = await (await fetch(uri)).blob();
-                    formData.append("images", new File([blob], filename, { type: "image/jpeg" }));
+                    const res = await fetch(uri);
+                    const blob = await res.blob();
+                    formData.append("images", blob, filename);
                 } else {
                     formData.append("images", { uri, name: filename, type: "image/jpeg" } as any);
                 }

@@ -18,6 +18,7 @@ import { dummyProducts } from "@/assets/assets";
 import { useCart } from "../../../context/CartContext";
 import { useWishList } from "../../../context/WishListContext";
 import Toast from "react-native-toast-message";
+import api from "@/constants/api";
 
 const { width } = Dimensions.get("window");
 
@@ -35,16 +36,40 @@ export default function ProductDetails() {
     const [addingToCart, setAddingToCart] = useState(false);
 
     useEffect(() => {
-        setLoading(true);
+        let isMounted = true;
+        const fetchProductDetails = async () => {
+            setLoading(true);
+            try {
+                const { data } = await api.get(`/products/${id}`);
+                if (isMounted && data.success && data.data) {
+                    setProduct(data.data);
+                    setSelectedSize(data.data.sizes?.[0] || "");
+                    setActiveImageIndex(0);
+                    setLoading(false);
+                    return;
+                }
+            } catch (err) {
+                console.log("Could not fetch product from backend, checking dummy fallback:", err);
+            }
 
-        const foundProduct =
-            dummyProducts.find((item) => item._id === id) ?? null;
+            const foundProduct =
+                dummyProducts.find((item) => item._id === id) ?? null;
 
-        setProduct(foundProduct as Product | null);
-        setSelectedSize("");
+            if (isMounted) {
+                setProduct(foundProduct as Product | null);
+                setSelectedSize(foundProduct?.sizes?.[0] || "");
+                setActiveImageIndex(0);
+                setLoading(false);
+            }
+        };
 
-        setActiveImageIndex(0);
-        setLoading(false);
+        if (id) {
+            fetchProductDetails();
+        }
+
+        return () => {
+            isMounted = false;
+        };
     }, [id]);
 
     const isLiked = product ? isInWishlist(product._id) : false;
