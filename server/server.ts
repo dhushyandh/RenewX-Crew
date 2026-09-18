@@ -13,11 +13,14 @@ import orderRoutes from "./routes/orderRoutes.js";
 import AddressRoutes from "./routes/addressRoutes.js";
 import AdminRoutes from "./routes/adminRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
+import paymentRoutes from "./routes/paymentRoutes.js";
+import { razorpayWebhook } from "./controllers/paymentWebhook.js";
 
 const app = express();
 await connectDB()
 
 app.post('/api/clerk', express.raw({ type: 'application/json' }), clerkWebhook)
+app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), razorpayWebhook)
 
 // Security middleware
 app.disable("x-powered-by");
@@ -91,6 +94,7 @@ app.use('/api/cart', CartRoutes)
 app.use('/api/orders', orderRoutes)
 app.use('/api/addresses', AddressRoutes)
 app.use('/api/notifications', notificationRoutes)
+app.use('/api/payments', paymentRoutes)
 
 // Admin Route
 app.use('/api/admin', AdminRoutes)
