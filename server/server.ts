@@ -164,6 +164,28 @@ app.use('/api/payments', requireDatabase, paymentRoutes);
 app.use('/api/admin', requireDatabase, AdminRoutes);
 
 
+
+// Keep API errors JSON and avoid exposing internal stack traces to clients.
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+    if (err instanceof multer.MulterError) {
+        const message = err.code === "LIMIT_FILE_SIZE"
+            ? "Image file is too large. Maximum size is 5 MB per image."
+            : err.code === "LIMIT_FILE_COUNT" || err.code === "LIMIT_UNEXPECTED_FILE"
+                ? "Too many image files were uploaded. Maximum is 5 images."
+                : "Invalid multipart upload request";
+        return res.status(400).json({ success: false, message });
+    }
+
+    if (err?.message === "Only JPEG, PNG, and WebP images are allowed.") {
+        return res.status(400).json({ success: false, message: err.message });
+    }
+
+    console.error("Unhandled API error:", err);
+    return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+    });
+});
 app.listen(port, () => {
     console.log(`Server is running at http://localhost:${port}`);
 });
