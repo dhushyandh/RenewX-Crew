@@ -43,7 +43,7 @@ export const registerPushToken = async (req: Request, res: Response) => {
                 platform: ["android", "ios", "web"].includes(platform) ? platform : "android",
                 enabled: true,
             },
-            { upsert: true, new: true, setDefaultsOnInsert: true }
+            { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
         );
 
         return res.status(200).json({
@@ -169,7 +169,7 @@ export const updatePreferences = async (req: Request, res: Response) => {
         const preferences = await NotificationPreference.findOneAndUpdate(
             { userId: String(userId) },
             { ...updateData, userId: String(userId) },
-            { upsert: true, new: true, setDefaultsOnInsert: true }
+            { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
         );
 
         return res.status(200).json({
