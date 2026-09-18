@@ -3,12 +3,19 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
 const getBaseUrl = (): string => {
+    // Expo Web development runs in the browser on the same machine as the API.
+    // Prefer localhost in development so stale LAN/production environment variables
+    // cannot silently send local requests to an unreachable API.
+    if (__DEV__ && Platform.OS === 'web') {
+        return 'http://localhost:3000/api';
+    }
+
     // 1. Explicit production or custom environment variable URL
     if (process.env.EXPO_PUBLIC_API_URL) {
         return process.env.EXPO_PUBLIC_API_URL;
     }
 
-    // 2. Web browser: use current window hostname
+    // 2. Web browser in a non-development build.
     if (Platform.OS === 'web') {
         if (typeof window !== 'undefined' && window.location?.hostname) {
             return `http://${window.location.hostname}:3000/api`;
