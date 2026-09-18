@@ -7,6 +7,7 @@ import { sendOrderPushNotification, sendAdminNewOrderNotification } from "../ser
 import {
     fetchRazorpayOrder,
     fetchRazorpayPayment,
+    refundRazorpayPayment,
     verifyRazorpayPaymentSignature,
 } from "../services/razorpay.js";
 
@@ -240,6 +241,8 @@ export const createOrder = async (req: Request, res: Response) => {
                         message: "Payment has not been captured",
                     });
                 }
+
+                verifiedPaymentCaptured = true;
             } catch (paymentError) {
                 console.error("Razorpay verification error:", paymentError);
                 return res.status(502).json({
@@ -250,6 +253,7 @@ export const createOrder = async (req: Request, res: Response) => {
         }
 
         let order: any;
+        let verifiedPaymentCaptured = false;
 
         await session.withTransaction(async () => {
             // Atomic stock reservation/decrement for every item.
@@ -341,13 +345,21 @@ export const createOrder = async (req: Request, res: Response) => {
             order,
         });
     } catch (error: any) {
+        // If Razorpay captured the payment but our order transaction failed,
+        // refund the captured amount rather than leaving the customer charged
+        // without a corresponding order.
+        if (paymentMethod === "razorpay" && verifiedPaymentCaptured && razorpayPaymentId) {
+            try {
+                await refundRazorpayPayment(razorpayPaymentId, Math.round(totalAmount * 100));
+            } catch (refundError) {
+                console.error("CRITICAL: Razorpay refund failed after order creation failure:", refundError);
+            }
+        }
+
         if (error?.message?.startsWith("INSUFFICIENT_STOCK:")) {
             return res.status(409).json({
                 success: false,
-                message: `Insufficient stock for ${error.message.replace(
-                    "INSUFFICIENT_STOCK:",
-                    ""
-                )}. Please refresh your cart and try again.`,
+                message: `Stock changed while processing your payment. The payment has been refunded. Please refresh and try again.`,
             });
         }
 
@@ -355,7 +367,9 @@ export const createOrder = async (req: Request, res: Response) => {
 
         return res.status(500).json({
             success: false,
-            message: "Failed to create order",
+            message: paymentMethod === "razorpay"
+                ? "Order creation failed. If your payment was captured, it has been submitted for refund."
+                : "Failed to create order",
         });
     } finally {
         await session.endSession();
