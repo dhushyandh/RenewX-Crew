@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import {
+import { Platform,
     ActivityIndicator,
     Dimensions,
     Image,
@@ -217,13 +217,7 @@ export default function ProductDetails() {
                             onPress={() => router.back()}
                             activeOpacity={0.8}
                             className="h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm"
-                            style={{
-                                shadowColor: "#000",
-                                shadowOffset: { width: 0, height: 2 },
-                                shadowOpacity: 0.1,
-                                shadowRadius: 4,
-                                elevation: 3,
-                            }}
+                            style={Platform.select({ web: { boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)" }, default: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 } })}
                         >
                             <Ionicons
                                 name="arrow-back"
@@ -236,13 +230,7 @@ export default function ProductDetails() {
                             onPress={() => toggleWishlist(product)}
                             activeOpacity={0.8}
                             className="h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm"
-                            style={{
-                                shadowColor: "#000",
-                                shadowOffset: { width: 0, height: 2 },
-                                shadowOpacity: 0.1,
-                                shadowRadius: 4,
-                                elevation: 3,
-                            }}
+                            style={Platform.select({ web: { boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)" }, default: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 } })}
                         >
                             <Ionicons
                                 name={isLiked ? "heart" : "heart-outline"}

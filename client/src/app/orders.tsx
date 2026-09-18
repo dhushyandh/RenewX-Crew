@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import {
+import { Platform,
     ActivityIndicator,
     FlatList,
     Image,
@@ -230,11 +230,7 @@ const styles = StyleSheet.create({
         marginBottom: 14,
         borderWidth: 1,
         borderColor: "#E5E7EB",
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 3,
-        elevation: 2,
+        ...(Platform.OS === "web" ? { boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)" } : { shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 2 }),
     },
     orderHeader: {
         flexDirection: "row",

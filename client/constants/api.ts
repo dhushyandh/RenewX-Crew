@@ -1,25 +1,46 @@
 import axios from 'axios';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
-const getBaseUrl = () => {
+const getBaseUrl = (): string => {
+    // 1. Explicit production or custom environment variable URL
     if (process.env.EXPO_PUBLIC_API_URL) {
         return process.env.EXPO_PUBLIC_API_URL;
     }
 
-    if (Platform.OS === 'android') {
-        // Android emulator uses 10.0.2.2 to access host machine localhost
-        // If testing on physical device, replace with your local WiFi IP or set EXPO_PUBLIC_API_URL
-        return 'http://10.0.2.2:3000/api';
+    // 2. Web browser: use current window hostname
+    if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined' && window.location?.hostname) {
+            return `http://${window.location.hostname}:3000/api`;
+        }
+        return 'http://localhost:3000/api';
     }
 
-    // iOS simulator and Web browser
-    return 'http://localhost:3000/api';
+    // 3. Mobile device (Android / iOS): extract host IP dynamically from Expo Metro development server
+    const hostUri =
+        Constants.expoConfig?.hostUri ||
+        (Constants as any).manifest?.debuggerHost ||
+        (Constants as any).manifest2?.extra?.expoGo?.debuggerHost;
+
+    if (hostUri) {
+        const ip = hostUri.split(':')[0];
+        if (ip && ip !== 'localhost' && ip !== '127.0.0.1') {
+            return `http://${ip}:3000/api`;
+        }
+    }
+
+    // 4. Default to current developer LAN IP for physical device testing
+    return 'http://192.168.1.6:3000/api';
 };
 
 const api = axios.create({
     baseURL: getBaseUrl(),
     timeout: 15000,
 });
+
+if (__DEV__) {
+    console.log(`[API Config] Base URL set to: ${api.defaults.baseURL}`);
+}
 
 export const getAuthHeaders = async (getToken: () => Promise<string | null>) => {
     try {

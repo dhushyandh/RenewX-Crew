@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import {
+import { Platform,
     View,
     Text,
     StyleSheet,
@@ -266,11 +266,7 @@ const styles = StyleSheet.create({
         backgroundColor: "#10B981",
         alignItems: "center",
         justifyContent: "center",
-        shadowColor: "#10B981",
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.35,
-        shadowRadius: 10,
-        elevation: 6,
+        ...(Platform.OS === "web" ? { boxShadow: "0 6px 10px rgba(16, 185, 129, 0.35)" } : { shadowColor: "#10B981", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 6 }),
     },
     celebrationTitle: {
         fontSize: 26,
@@ -310,11 +306,7 @@ const styles = StyleSheet.create({
         marginBottom: 16,
         borderWidth: 1,
         borderColor: "#F3F4F6",
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.04,
-        shadowRadius: 8,
-        elevation: 2,
+        ...(Platform.OS === "web" ? { boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)" } : { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 }),
     },
     cardTitle: {
         fontSize: 16,
