@@ -108,6 +108,10 @@ const orderSchema = new mongoose.Schema<IOrder>({
     deliveredAt: Date
 }, { timestamps: true })
 
+// Fast customer order history and admin order listing.
+orderSchema.index({ user: 1, createdAt: -1 });
+orderSchema.index({ orderStatus: 1, createdAt: -1 });
+
 
 const Order = mongoose.model<IOrder>('Order', orderSchema)
 
