@@ -7,6 +7,7 @@ import {
     useCallback,
     useContext,
     useEffect,
+    useRef,
     useState,
 } from "react";
 
@@ -27,67 +28,48 @@ export type CartItem = {
 
 export type CartContextType = {
     cartItems: CartItem[];
-
-    addToCart: (
-        product: Product,
-        size: string,
-    ) => Promise<void>;
-
-    removeFromCart: (
-        productId: string,
-        size: string,
-    ) => Promise<void>;
-
-    updateQuantity: (
-        productId: string,
-        size: string,
-        quantity: number,
-    ) => Promise<void>;
-
+    addToCart: (product: Product, size: string) => Promise<void>;
+    removeFromCart: (productId: string, size: string) => Promise<void>;
+    updateQuantity: (productId: string, size: string, quantity: number) => Promise<void>;
     clearCart: () => Promise<void>;
-
     cartTotal: number;
     itemCount: number;
     isLoading: boolean;
-
     fetchCart: () => Promise<void>;
 };
 
-const CartContext =
-    createContext<CartContextType | undefined>(
-        undefined,
-    );
+const CartContext = createContext<CartContextType | undefined>(undefined);
 
-export function CartProvider({
-    children,
-}: {
-    children: React.ReactNode;
-}) {
-    const [cartItems, setCartItems] =
-        useState<CartItem[]>([]);
-
-    const [cartTotal, setCartTotal] =
-        useState(0);
-
-    const [isLoading, setIsLoading] =
-        useState(false);
+export function CartProvider({ children }: { children: React.ReactNode }) {
+    const [cartItems, setCartItems] = useState<CartItem[]>([]);
+    const [cartTotal, setCartTotal] = useState(0);
+    const [isLoading, setIsLoading] = useState(false);
 
     const { isSignedIn, getToken } = useAuth();
+    const { registerRefreshHandler } = useAppRefresh();
 
-    const { registerRefreshHandler } =
-        useAppRefresh();
+    // Clerk may recreate auth functions between renders. Keep the latest
+    // auth values in refs so fetchCart never changes identity.
+    const authRef = useRef({ isSignedIn, getToken });
+
+    useEffect(() => {
+        authRef.current = { isSignedIn, getToken };
+    }, [isSignedIn, getToken]);
 
     const fetchCart = useCallback(async () => {
-        if (!isSignedIn) {
-            setCartItems([]);
-            setCartTotal(0);
+        const { isSignedIn: signedIn, getToken: token } = authRef.current;
+
+        if (!signedIn) {
+            setCartItems((current) => (current.length === 0 ? current : []));
+            setCartTotal((current) => (current === 0 ? current : 0));
             setIsLoading(false);
             return;
         }
 
         setIsLoading(true);
+
         try {
-            const authConfig = await getAuthHeaders(getToken);
+            const authConfig = await getAuthHeaders(token);
             const response = await api.get("/cart", authConfig);
             const serverCart = response.data?.data;
 
@@ -95,15 +77,17 @@ export function CartProvider({
                 throw new Error("Invalid cart response");
             }
 
-            const mappedItems: CartItem[] = (Array.isArray(serverCart.items) ? serverCart.items : [])
+            const mappedItems: CartItem[] = (
+                Array.isArray(serverCart.items) ? serverCart.items : []
+            )
                 .filter((item: any) => item?.product?._id)
                 .map((item: any) => ({
                     id: String(item._id),
                     product: item.product,
                     productId: String(item.product._id),
                     userId: String(serverCart.user ?? ""),
-                    quantity: item.quantity,
-                    size: item.size ?? "",
+                    quantity: Number(item.quantity ?? 0),
+                    size: String(item.size ?? ""),
                     price: Number(item.price ?? item.product.price ?? 0),
                     createdAt: item.createdAt ?? serverCart.createdAt ?? new Date().toISOString(),
                     updatedAt: item.updatedAt ?? serverCart.updatedAt ?? new Date().toISOString(),
@@ -118,43 +102,41 @@ export function CartProvider({
         } finally {
             setIsLoading(false);
         }
-    }, [isSignedIn, getToken]);
+    }, []);
 
-    /*
-     * Register cart refresh globally.
-     */
+    // Register the stable callback once. This prevents the global refresh
+    // registration from becoming a render -> effect -> state-update loop.
     useEffect(() => {
-        return registerRefreshHandler(
-            fetchCart,
-        );
+        return registerRefreshHandler(fetchCart);
     }, [registerRefreshHandler, fetchCart]);
 
-    /*
-     * Initial cart load.
-     */
+    // Initial load.
     useEffect(() => {
         void fetchCart();
     }, [fetchCart]);
 
-    const addToCart = async (
-        product: Product,
-        size: string,
-    ) => {
-        if (!isSignedIn) throw new Error("Authentication required");
-        if (!product?._id || !size?.trim()) throw new Error("Product and size are required");
+    const addToCart = async (product: Product, size: string) => {
+        const { isSignedIn: signedIn, getToken: token } = authRef.current;
+
+        if (!signedIn) throw new Error("Authentication required");
+        if (!product?._id || !size?.trim()) {
+            throw new Error("Product and size are required");
+        }
 
         setIsLoading(true);
+
         try {
-            const authConfig = await getAuthHeaders(getToken);
-            const response = await api.post("/cart/add", {
-                productId: product._id,
-                quantity: 1,
-                size: size.trim(),
-            }, authConfig);
+            const authConfig = await getAuthHeaders(token);
+            const response = await api.post(
+                "/cart/add",
+                { productId: product._id, quantity: 1, size: size.trim() },
+                authConfig,
+            );
 
             if (!response.data?.success) {
                 throw new Error(response.data?.message || "Failed to add item to cart");
             }
+
             await fetchCart();
         } catch (error) {
             console.error("Failed to add item to cart:", error);
@@ -164,21 +146,24 @@ export function CartProvider({
         }
     };
 
-    const removeFromCart = async (
-        productId: string,
-        size: string,
-    ) => {
-        if (!isSignedIn) throw new Error("Authentication required");
+    const removeFromCart = async (productId: string, size: string) => {
+        const { isSignedIn: signedIn, getToken: token } = authRef.current;
+
+        if (!signedIn) throw new Error("Authentication required");
+
         setIsLoading(true);
+
         try {
-            const authConfig = await getAuthHeaders(getToken);
+            const authConfig = await getAuthHeaders(token);
             const response = await api.delete(
-                `/cart/remove/${productId}?size=${encodeURIComponent(size)}`,
+                `/cart/remove/${productId}?size=${encodeURIComponent(size.trim())}`,
                 authConfig,
             );
+
             if (!response.data?.success) {
                 throw new Error(response.data?.message || "Failed to remove item");
             }
+
             await fetchCart();
         } catch (error) {
             console.error("Failed to remove cart item:", error);
@@ -193,22 +178,27 @@ export function CartProvider({
         size: string,
         quantity: number,
     ) => {
-        if (!isSignedIn) throw new Error("Authentication required");
+        const { isSignedIn: signedIn, getToken: token } = authRef.current;
+
+        if (!signedIn) throw new Error("Authentication required");
         if (!Number.isInteger(quantity) || quantity < 0 || quantity > 100) {
             throw new Error("Quantity must be an integer between 0 and 100");
         }
 
         setIsLoading(true);
+
         try {
-            const authConfig = await getAuthHeaders(getToken);
+            const authConfig = await getAuthHeaders(token);
             const response = await api.put(
                 `/cart/update/${productId}`,
-                { quantity, size },
+                { quantity, size: size.trim() },
                 authConfig,
             );
+
             if (!response.data?.success) {
                 throw new Error(response.data?.message || "Failed to update cart item");
             }
+
             await fetchCart();
         } catch (error) {
             console.error("Failed to update cart item:", error);
@@ -219,19 +209,24 @@ export function CartProvider({
     };
 
     const clearCart = async () => {
-        if (!isSignedIn) {
+        const { isSignedIn: signedIn, getToken: token } = authRef.current;
+
+        if (!signedIn) {
             setCartItems([]);
             setCartTotal(0);
             return;
         }
 
         setIsLoading(true);
+
         try {
-            const authConfig = await getAuthHeaders(getToken);
+            const authConfig = await getAuthHeaders(token);
             const response = await api.delete("/cart", authConfig);
+
             if (!response.data?.success) {
                 throw new Error(response.data?.message || "Failed to clear cart");
             }
+
             setCartItems([]);
             setCartTotal(0);
         } catch (error) {
@@ -242,11 +237,7 @@ export function CartProvider({
         }
     };
 
-    const itemCount = cartItems.reduce(
-        (sum, item) =>
-            sum + item.quantity,
-        0,
-    );
+    const itemCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
     return (
         <CartContext.Provider
@@ -271,9 +262,7 @@ export function useCart() {
     const context = useContext(CartContext);
 
     if (!context) {
-        throw new Error(
-            "useCart must be used within CartProvider",
-        );
+        throw new Error("useCart must be used within CartProvider");
     }
 
     return context;
