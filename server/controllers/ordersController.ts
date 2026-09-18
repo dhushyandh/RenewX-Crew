@@ -71,6 +71,10 @@ export const getOrder = async (req: Request, res: Response) => {
 
 export const createOrder = async (req: Request, res: Response) => {
     const session = await mongoose.startSession();
+    let paymentMethod: string | undefined;
+    let razorpayPaymentId: string | undefined;
+    let verifiedPaymentCaptured = false;
+    let totalAmount = 0;
 
     try {
         const userId = (req as any).user?.id || (req as any).user?._id;
@@ -81,15 +85,14 @@ export const createOrder = async (req: Request, res: Response) => {
             });
         }
 
-        const {
-            items: directItems,
-            shippingAddress,
-            paymentMethod,
-            notes,
-            razorpayOrderId,
-            razorpayPaymentId,
-            razorpaySignature,
-        } = req.body;
+        const body = req.body || {};
+        paymentMethod = body.paymentMethod;
+        razorpayPaymentId = body.razorpayPaymentId;
+        const directItems = body.items;
+        const shippingAddress = body.shippingAddress;
+        const notes = body.notes;
+        const razorpayOrderId = body.razorpayOrderId;
+        const razorpaySignature = body.razorpaySignature;
 
         if (!shippingAddress?.street || !shippingAddress?.city ||
             !shippingAddress?.state || !shippingAddress?.zipCode ||
@@ -195,7 +198,7 @@ export const createOrder = async (req: Request, res: Response) => {
         // Never accept shipping, tax, subtotal, or total from the client.
         const shippingCost = subtotal >= 1000 ? 0 : 80;
         const tax = 0;
-        const totalAmount = subtotal + shippingCost + tax;
+        totalAmount = subtotal + shippingCost + tax;
 
         if (paymentMethod === "razorpay") {
             const existingOrder = await Order.findOne({ razorpayOrderId });
@@ -217,11 +220,7 @@ export const createOrder = async (req: Request, res: Response) => {
                     });
                 }
 
-                const validSignature = verifyRazorpayPaymentSignature(
-                    razorpayOrderId,
-                    razorpayPaymentId,
-                    razorpaySignature
-                );
+                const validSignature = verifyRazorpayPaymentSignature(razorpayOrderId!, razorpayPaymentId!, razorpaySignature!);
 
                 if (!validSignature) {
                     return res.status(400).json({
@@ -230,7 +229,7 @@ export const createOrder = async (req: Request, res: Response) => {
                     });
                 }
 
-                const payment = await fetchRazorpayPayment(razorpayPaymentId);
+                const payment = await fetchRazorpayPayment(razorpayPaymentId!);
 
                 if (payment?.order_id !== razorpayOrderId ||
                     Number(payment?.amount) !== Math.round(totalAmount * 100) ||
@@ -253,7 +252,6 @@ export const createOrder = async (req: Request, res: Response) => {
         }
 
         let order: any;
-        let verifiedPaymentCaptured = false;
 
         await session.withTransaction(async () => {
             // Atomic stock reservation/decrement for every item.
@@ -283,7 +281,7 @@ export const createOrder = async (req: Request, res: Response) => {
                     .slice(2, 8)
                     .toUpperCase()}`;
 
-            const created = await Order.create(
+            const created: any = await (Order as any).create(
                 [{
                     user: userId,
                     items: orderItems,
