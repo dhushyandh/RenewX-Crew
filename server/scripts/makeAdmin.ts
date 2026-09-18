@@ -12,7 +12,7 @@ const makeAdmin = async () => {
             return;
         }
 
-        const user = await User.findOneAndUpdate({ email }, { role: 'admin' }, { new: true });
+        const user = await User.findOneAndUpdate({ email }, { role: 'admin' }, { returnDocument: 'after' });
 
         if (!user) {
             console.error(`❌ User with email ${email} not found`);
