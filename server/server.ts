@@ -6,7 +6,6 @@ import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import connectDB from "./config/db.js";
 import { clerkMiddleware, getAuth } from '@clerk/express'
 import { clerkWebhook } from "./controllers/webhooks.js";
-import makeAdmin from "./scripts/makeAdmin.js";
 import productRoutes from "./routes/productsRoutes.js";
 import CartRoutes from "./routes/cartRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
@@ -147,7 +146,6 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/admin', AdminRoutes);
 
-await makeAdmin();
 
 app.listen(port, () => {
     console.log(`Server is running at http://localhost:${port}`);
