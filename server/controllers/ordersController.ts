@@ -66,106 +66,179 @@ export const getOrder = async (req: Request, res: Response) => {
 export const createOrder = async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user?.id || (req as any).user?._id;
-        const { items: directItems, shippingAddress, paymentMethod, notes, pricing } = req.body;
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: "Authentication required",
+            });
+        }
 
-        let orderItems: any[] = [];
+        const {
+            items: directItems,
+            shippingAddress,
+            paymentMethod,
+            notes,
+            paymentIntentId,
+        } = req.body;
+
+        if (!shippingAddress?.street || !shippingAddress?.city ||
+            !shippingAddress?.state || !shippingAddress?.zipCode ||
+            !shippingAddress?.country) {
+            return res.status(400).json({
+                success: false,
+                message: "Complete shipping address is required",
+            });
+        }
+
+        if (paymentMethod !== "cash" && paymentMethod !== "stripe") {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid payment method",
+            });
+        }
+
+        // Online payments must be verified by the payment provider webhook.
+        // The client is never allowed to mark an order as paid.
+        if (paymentMethod === "stripe" && !paymentIntentId) {
+            return res.status(400).json({
+                success: false,
+                message: "Stripe payment intent is required",
+            });
+        }
+
+        const sourceItems: any[] = Array.isArray(directItems) && directItems.length > 0
+            ? directItems
+            : ((await Cart.findOne({ user: userId }).lean())?.items || []);
+
+        if (sourceItems.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Cart is empty",
+            });
+        }
+
+        const orderItems: any[] = [];
         let subtotal = 0;
 
-        // If items are provided directly in the request body (e.g. from checkout flow)
-        if (directItems && Array.isArray(directItems) && directItems.length > 0) {
-            for (const item of directItems) {
-                const prodId = item.productId || item.product?._id || item.product;
-                const product = await Product.findById(prodId);
+        // IMPORTANT: Product price, name, size and stock are authoritative on
+        // the server. Never trust price/name/quantity totals supplied by mobile.
+        for (const item of sourceItems) {
+            const productId = item.productId || item.product?._id || item.product;
 
-                const itemPrice = Number(item.price || product?.price || 0);
-                const itemQty = Number(item.quantity || 1);
-                const itemName = item.name || product?.name || "Product Item";
-                const itemSize = item.size || "M";
-
-                orderItems.push({
-                    product: prodId,
-                    name: itemName,
-                    quantity: itemQty,
-                    price: itemPrice,
-                    size: itemSize
-                });
-
-                if (product) {
-                    if (product.stock >= itemQty) {
-                        product.stock -= itemQty;
-                        await product.save();
-                    }
-                }
-
-                subtotal += itemPrice * itemQty;
-            }
-        } else {
-            // Otherwise fallback to user's cart in database
-            const cart = await Cart.findOne({ user: userId }).populate("items.product", "name images price stock");
-            if (!cart || cart.items.length === 0) {
+            if (!productId) {
                 return res.status(400).json({
                     success: false,
-                    message: "Cart is empty"
+                    message: "Invalid product in order",
                 });
             }
 
-            for (const item of cart.items) {
-                const product = await Product.findById((item.product as any)._id || item.product);
-                orderItems.push({
-                    product: (item.product as any)._id || item.product,
-                    name: (item.product as any).name || "Product",
-                    quantity: item.quantity,
-                    price: item.price,
-                    size: item.size
+            const quantity = Number(item.quantity);
+            if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid item quantity",
                 });
+            }
 
-                if (product && product.stock >= item.quantity) {
-                    product.stock -= item.quantity;
-                    await product.save();
+            const product = await Product.findOne({
+                _id: productId,
+                isActive: true,
+            }).lean();
+
+            if (!product) {
+                return res.status(404).json({
+                    success: false,
+                    message: "One or more products are unavailable",
+                });
+            }
+
+            if (product.stock < quantity) {
+                return res.status(409).json({
+                    success: false,
+                    message: `Insufficient stock for ${product.name}`,
+                });
+            }
+
+            const size = item.size;
+            if (product.sizes?.length > 0) {
+                if (!size || !product.sizes.includes(size)) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `Invalid size for ${product.name}`,
+                    });
                 }
+            }
 
-                subtotal += item.price * item.quantity;
+            const price = Number(product.price);
+            orderItems.push({
+                product: product._id,
+                name: product.name,
+                quantity,
+                price,
+                ...(size ? { size } : {}),
+            });
+
+            subtotal += price * quantity;
+        }
+
+        // Pricing is calculated entirely on the server.
+        const shippingCost = subtotal >= 1000 ? 0 : 80;
+        const tax = 0;
+        const totalAmount = subtotal + shippingCost + tax;
+
+        // Atomically reserve/decrement stock. If any item cannot be reserved,
+        // the order is rejected instead of silently creating an under-stocked order.
+        for (const item of orderItems) {
+            const updated = await Product.findOneAndUpdate(
+                {
+                    _id: item.product,
+                    isActive: true,
+                    stock: { $gte: item.quantity },
+                },
+                { $inc: { stock: -item.quantity } },
+                { new: true }
+            );
+
+            if (!updated) {
+                return res.status(409).json({
+                    success: false,
+                    message: `Insufficient stock for ${item.name}. Please refresh your cart and try again.`,
+                });
             }
         }
 
-        const shippingCost = pricing?.shipping !== undefined ? Number(pricing.shipping) : (subtotal >= 1000 ? 0 : 80);
-        const tax = pricing?.tax !== undefined ? Number(pricing.tax) : 0;
-        const totalAmount = pricing?.total !== undefined ? Number(pricing.total) : (subtotal + shippingCost + tax);
+        const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
         const order: any = await Order.create({
             user: userId,
             items: orderItems,
-            shippingAddress: shippingAddress || {
-                street: "Standard Delivery",
-                city: "Local",
-                state: "Local",
-                zipCode: "000000",
-                country: "India"
-            },
-            paymentMethod: paymentMethod === "stripe" ? "stripe" : "cash",
-            paymentStatus: paymentMethod === "card" || paymentMethod === "upi" || paymentMethod === "stripe" ? "paid" : "pending",
+            shippingAddress,
+            paymentMethod,
+            // Payment completion is controlled by the server/webhook.
+            paymentStatus: paymentMethod === "cash" ? "pending" : "pending",
             orderStatus: "placed",
             totalAmount,
             subtotal,
             tax,
             shippingCost,
             notes,
-            paymentIntentId: req.body.paymentIntentId,
-            orderNumber: "ORD-" + Date.now(),
+            paymentIntentId: paymentMethod === "stripe" ? paymentIntentId : undefined,
+            orderNumber,
         });
 
-        // Clear cart after order is successfully placed
-        await Cart.findOneAndUpdate({ user: userId }, { items: [], totalAmount: 0 });
+        // Only clear the cart after the order itself has been created.
+        await Cart.findOneAndUpdate(
+            { user: userId },
+            { items: [], totalAmount: 0 }
+        );
 
-        // Dispatch push notification to customer devices
         sendOrderPushNotification({
-            userId: (req as any).user?.clerkId || (req as any).user?.id || (req as any).user?._id?.toString() || String(userId),
+            userId: (req as any).user?.clerkId || String(userId),
             orderId: order._id.toString(),
             orderNumber: order.orderNumber,
             status: "placed",
         }).catch((err) => console.warn("Order placement push error:", err));
 
-        // Dispatch new order alert to Admin devices
         sendAdminNewOrderNotification({
             orderId: order._id.toString(),
             orderNumber: order.orderNumber,
@@ -176,13 +249,13 @@ export const createOrder = async (req: Request, res: Response) => {
         return res.status(201).json({
             success: true,
             message: "Order placed successfully",
-            order
+            order,
         });
-    } catch (error: any) {
+    } catch (error) {
         console.error("Create order error:", error);
         return res.status(500).json({
             success: false,
-            message: error.message || "Failed to create order"
+            message: "Failed to create order",
         });
     }
 };
