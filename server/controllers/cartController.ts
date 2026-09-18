@@ -108,7 +108,8 @@ export const removeCartItem = async (req: Request, res: Response) => {
     try {
         const { itemId } = req.params;
         const size = typeof req.query.size === "string" ? req.query.size.trim() : undefined;
-        if (!itemId || !mongoose.isValidObjectId(itemId) || !size) return res.status(400).json({ success: false, message: "Product and size are required" });
+        const normalizedSize = size;
+        if (!itemId || !mongoose.isValidObjectId(itemId) || !normalizedSize) return res.status(400).json({ success: false, message: "Product and size are required" });
 
         const cart = await Cart.findOne({ user: req.user.id });
         if (!cart) return res.status(404).json({ success: false, message: "Cart not found" });
