@@ -2,7 +2,7 @@ import { View, Text, ScrollView, Image, Dimensions, TouchableOpacity, ActivityIn
 import React, { useCallback, useEffect, useState } from 'react'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Header from '../../../components/Header'
-import { BANNERS, dummyProducts } from '@/assets/assets'
+import { BANNERS } from '@/assets/assets'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { CATEGORIES } from '@/constants'
 import CategoryItem from '../../../components/CategoryItem'
@@ -29,11 +29,11 @@ export default function Home() {
             if (data.success && data.data && data.data.length > 0) {
                 setProducts(data.data);
             } else {
-                setProducts(dummyProducts as any);
+                setProducts([]);
             }
         } catch (error) {
-            console.log('Failed to fetch products from API, fallback to dummy products:', error);
-            setProducts(dummyProducts as any);
+            console.warn('Failed to fetch products from API:', error);
+            setProducts([]);
         } finally {
             setLoading(false);
             setRefreshing(false);
