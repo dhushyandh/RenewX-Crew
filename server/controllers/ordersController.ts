@@ -372,6 +372,15 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     try {
         const { orderStatus, status, paymentStatus } = req.body;
         const targetStatus = orderStatus || status;
+        const allowedOrderStatuses = ["cancelled", "placed", "processing", "shipped", "delivered"];
+        const allowedPaymentStatuses = ["pending", "completed", "cancelled"];
+
+        if (targetStatus && !allowedOrderStatuses.includes(targetStatus)) {
+            return res.status(400).json({ success: false, message: "Invalid order status" });
+        }
+        if (paymentStatus && !allowedPaymentStatuses.includes(paymentStatus)) {
+            return res.status(400).json({ success: false, message: "Invalid payment status" });
+        }
 
         const order = await Order.findById(req.params.id);
         if (!order) {
@@ -420,9 +429,16 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
 // Get all orders -> GET /api/orders/admin/all
 export const getAllOrders = async (req: Request, res: Response) => {
     try {
-        const { page = 1, limit = 50, status } = req.query;
+        const page = Math.max(1, Number(req.query.page) || 1);
+        const requestedLimit = Math.max(1, Number(req.query.limit) || 50);
+        const limit = Math.min(requestedLimit, 100);
+        const status = typeof req.query.status === "string" ? req.query.status : undefined;
         const query: any = {};
         if (status) {
+            const allowedStatuses = ["cancelled", "placed", "processing", "shipped", "delivered"];
+            if (!allowedStatuses.includes(status)) {
+                return res.status(400).json({ success: false, message: "Invalid order status filter" });
+            }
             query.orderStatus = status;
         }
 
@@ -430,8 +446,8 @@ export const getAllOrders = async (req: Request, res: Response) => {
             .sort("-createdAt")
             .populate("user", "name email")
             .populate("items.product", "name images price")
-            .skip((Number(page) - 1) * Number(limit))
-            .limit(Number(limit));
+            .skip((page - 1) * limit)
+            .limit(limit);
 
         const totalOrders = await Order.countDocuments(query);
 
@@ -441,9 +457,9 @@ export const getAllOrders = async (req: Request, res: Response) => {
             totalOrders,
             pagination: {
                 total: totalOrders,
-                page: Number(page),
-                pages: Math.ceil(totalOrders / Number(limit)),
-                limit: Number(limit)
+                page,
+                pages: Math.ceil(totalOrders / limit),
+                limit
             }
         });
     } catch (error: any) {
