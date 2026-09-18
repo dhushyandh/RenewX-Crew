@@ -15,12 +15,10 @@ const getBaseUrl = (): string => {
         return process.env.EXPO_PUBLIC_API_URL;
     }
 
-    // 2. Web browser in a non-development build.
-    if (Platform.OS === 'web') {
-        if (typeof window !== 'undefined' && window.location?.hostname) {
-            return `http://${window.location.hostname}:3000/api`;
-        }
-        return 'http://localhost:3000/api';
+    // 2. Production web builds must use the deployed API, never the browser's
+    // own hostname on port 3000.
+    if (Platform.OS === 'web' && !__DEV__) {
+        return 'https://api-dhushyandh.onrender.com/api';
     }
 
     // 3. Mobile device (Android / iOS): extract host IP dynamically from Expo Metro development server
@@ -36,12 +34,7 @@ const getBaseUrl = (): string => {
         }
     }
 
-    // 4. Production fallback. Release builds must never depend on a developer LAN IP.
-    if (!__DEV__) {
-        return 'https://api-dhushyandh.onrender.com/api';
-    }
-
-    // 5. Default to the developer LAN IP for physical-device testing.
+    // 4. Default to the developer LAN IP for physical-device testing.
     return 'http://192.168.1.6:3000/api';
 };
 
