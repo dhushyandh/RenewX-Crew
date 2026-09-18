@@ -16,7 +16,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 
 import { Product } from "@/constants/types";
-import { dummyProducts } from "@/assets/assets";
 import { CATEGORIES, COLORS } from "@/constants";
 import api from "@/constants/api";
 
@@ -39,7 +38,7 @@ type PriceFilter =
 
 export default function Shop() {
     const params = useLocalSearchParams<{ category?: string }>();
-    const [allProducts, setAllProducts] = useState<Product[]>(dummyProducts as any);
+    const [allProducts, setAllProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
@@ -58,11 +57,11 @@ export default function Shop() {
             if (data.success && data.data && data.data.length > 0) {
                 setAllProducts(data.data);
             } else {
-                setAllProducts(dummyProducts as any);
+                setAllProducts([]);
             }
         } catch (error) {
-            console.log('Failed to fetch products in Shop, using fallback:', error);
-            setAllProducts(dummyProducts as any);
+            console.warn('Failed to fetch products in Shop:', error);
+            setAllProducts([]);
         } finally {
             setLoading(false);
             setRefreshing(false);
