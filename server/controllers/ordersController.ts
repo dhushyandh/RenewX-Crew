@@ -20,6 +20,7 @@ export const getOrders = async (req: Request, res: Response) => {
         const orders = await Order.find(query)
             .sort("-createdAt")
             .populate("items.product", "name images price stock category")
+            .maxTimeMS(8000)
             .lean();
 
         return res.status(200).json({
@@ -27,9 +28,12 @@ export const getOrders = async (req: Request, res: Response) => {
             orders: orders || []
         });
     } catch (error: any) {
-        return res.status(500).json({
+        console.error("Get orders error:", error);
+        return res.status(error?.code === 50 ? 503 : 500).json({
             success: false,
-            message: error.message
+            message: error?.code === 50
+                ? "Order service is temporarily busy. Please try again shortly."
+                : "Failed to fetch orders"
         });
     }
 };
