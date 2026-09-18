@@ -5,6 +5,7 @@ import helmet from "helmet";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import connectDB from "./config/db.js";
 import { clerkMiddleware, getAuth } from '@clerk/express'
+import mongoose from "mongoose"
 import { clerkWebhook } from "./controllers/webhooks.js";
 import productRoutes from "./routes/productsRoutes.js";
 import CartRoutes from "./routes/cartRoutes.js";
@@ -129,22 +130,38 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 });
 
 app.get("/health", (req: Request, res: Response) => {
-    return res.status(200).json({ success: true, status: "ok" });
+    const dbReady = mongoose.connection.readyState === 1;
+    return res.status(dbReady ? 200 : 503).json({
+        success: dbReady,
+        status: dbReady ? "ok" : "degraded",
+        database: dbReady ? "connected" : "disconnected",
+    });
 });
 
+// Fail fast when MongoDB is unavailable. Without this guard, Mongoose can
+// buffer database queries and make clients wait until their HTTP timeout.
+const requireDatabase = (req: Request, res: Response, next: NextFunction) => {
+    if (mongoose.connection.readyState !== 1) {
+        return res.status(503).json({
+            success: false,
+            message: "Database temporarily unavailable. Please try again shortly.",
+        });
+    }
+    next();
+};
 const port = Number(process.env.PORT || 3000);
 
 app.get('/', (req: Request, res: Response) => {
     res.send('Server is Live!');
 });
 
-app.use('/api/products', productRoutes);
-app.use('/api/cart', CartRoutes);
-app.use('/api/orders', orderRoutes);
-app.use('/api/addresses', AddressRoutes);
-app.use('/api/notifications', notificationRoutes);
-app.use('/api/payments', paymentRoutes);
-app.use('/api/admin', AdminRoutes);
+app.use('/api/products', requireDatabase, productRoutes);
+app.use('/api/cart', requireDatabase, CartRoutes);
+app.use('/api/orders', requireDatabase, orderRoutes);
+app.use('/api/addresses', requireDatabase, AddressRoutes);
+app.use('/api/notifications', requireDatabase, notificationRoutes);
+app.use('/api/payments', requireDatabase, paymentRoutes);
+app.use('/api/admin', requireDatabase, AdminRoutes);
 
 
 app.listen(port, () => {
