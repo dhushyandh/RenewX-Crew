@@ -35,7 +35,14 @@ app.use(cors({
             return callback(null, true);
         }
 
-        if (allowedOrigins.includes(origin)) {
+        if (
+            allowedOrigins.length === 0 ||
+            allowedOrigins.includes(origin) ||
+            allowedOrigins.includes('*') ||
+            origin.startsWith('http://localhost') ||
+            origin.startsWith('http://127.0.0.1') ||
+            origin.startsWith('http://192.168.')
+        ) {
             return callback(null, true);
         }
 

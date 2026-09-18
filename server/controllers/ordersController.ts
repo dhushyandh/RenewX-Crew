@@ -63,7 +63,7 @@ export const getOrder = async (req: Request, res: Response) => {
     }
 };
 
-// export const createOrder = async (req: Request, res: Response) => {
+export const createOrder = async (req: Request, res: Response) => {
     const session = await mongoose.startSession();
 
     try {
@@ -295,11 +295,6 @@ export const getOrder = async (req: Request, res: Response) => {
         });
     } finally {
         await session.endSession();
-    }
-};
-
-te order",
-        });
     }
 };
 
