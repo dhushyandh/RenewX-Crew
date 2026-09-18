@@ -2,7 +2,6 @@ import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useRef, useState } from "react";
 import { ScrollView, Text, View, ActivityIndicator, RefreshControl } from "react-native";
 import { COLORS, getStatusColor } from "@/constants";
-import { dummyAdminStats } from "@/assets/assets";
 import { useAuth } from "@clerk/expo";
 import api, { getAuthHeaders } from "@/constants/api";
 
@@ -54,7 +53,7 @@ export default function AdminDashboard() {
             setLoading(false);
             setRefreshing(false);
         }
-    };
+    }, [getToken]);
 
     useFocusEffect(
         useCallback(() => {
