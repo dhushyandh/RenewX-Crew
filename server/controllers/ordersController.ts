@@ -265,7 +265,7 @@ export const createOrder = async (req: Request, res: Response) => {
                         stock: { $gte: item.quantity },
                     },
                     { $inc: { stock: -item.quantity } },
-                    { new: true, session }
+                    { returnDocument: 'after', session }
                 );
 
                 if (!updated) {
@@ -497,7 +497,7 @@ export const updateOrder = async (req: Request, res: Response) => {
         const order = await Order.findByIdAndUpdate(
             req.params.id,
             updates,
-            { new: true }
+            { returnDocument: 'after' }
         ).populate("user", "name email").populate("items.product", "name images price");
 
         if (!order) {
