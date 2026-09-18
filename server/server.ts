@@ -1,6 +1,8 @@
 import "dotenv/config";
 import express, { Request, Response, NextFunction } from 'express';
 import cors from "cors";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import connectDB from "./config/db.js";
 import { clerkMiddleware } from '@clerk/express'
 import { clerkWebhook } from "./controllers/webhooks.js";
@@ -17,9 +19,50 @@ await connectDB()
 
 app.post('/api/clerk', express.raw({ type: 'application/json' }), clerkWebhook)
 
-// Middleware
-app.use(cors())
-app.use(express.json());
+// Security middleware
+app.disable("x-powered-by");
+app.use(helmet());
+
+const allowedOrigins = (process.env.CORS_ORIGINS || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+app.use(cors({
+    origin: (origin, callback) => {
+        // Native mobile apps normally do not send an Origin header.
+        if (!origin) {
+            return callback(null, true);
+        }
+
+        if (allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+
+        return callback(new Error("CORS origin not allowed"));
+    },
+    credentials: false,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "Idempotency-Key"],
+}));
+
+// Limit JSON payloads to reduce accidental/malicious memory usage.
+app.use(express.json({ limit: "1mb" }));
+
+// Global API rate limit. Authentication/payment-sensitive endpoints should
+// receive stricter limits as those routes are hardened.
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 300,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    message: {
+        success: false,
+        message: "Too many requests. Please try again later.",
+    },
+});
+
+app.use("/api", apiLimiter);
 
 // Handle malformed JSON body errors cleanly without noisy stack traces
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
