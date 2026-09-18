@@ -6,6 +6,7 @@ import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import connectDB from "./config/db.js";
 import { clerkMiddleware, getAuth } from '@clerk/express'
 import mongoose from "mongoose"
+import multer from "multer";
 import { clerkWebhook } from "./controllers/webhooks.js";
 import productRoutes from "./routes/productsRoutes.js";
 import CartRoutes from "./routes/cartRoutes.js";
