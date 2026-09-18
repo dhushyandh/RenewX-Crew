@@ -14,19 +14,32 @@ import { useRouter } from "expo-router";
 import { useClerk, useUser } from "@clerk/expo";
 
 import { COLORS } from "@/constants";
+import { useNotifications } from "../../context/NotificationContext";
 
 export default function Settings() {
     const router = useRouter();
     const clerk = useClerk();
     const { user } = useUser();
 
-    const [notifications, setNotifications] =
-        useState(true);
+    const {
+        settings: notificationSettings,
+        updateSettings: updateNotificationSettings,
+        permissionGranted,
+    } = useNotifications();
 
-    const [orderUpdates, setOrderUpdates] =
-        useState(true);
+    const notifications = notificationSettings.general;
+    const orderUpdates = notificationSettings.orderUpdates;
+    const offers = notificationSettings.offers;
 
-    const [offers, setOffers] = useState(false);
+    const handleToggle = useCallback(
+        (key: "general" | "orderUpdates" | "offers", value: boolean) => {
+            updateNotificationSettings({
+                ...notificationSettings,
+                [key]: value,
+            });
+        },
+        [notificationSettings, updateNotificationSettings],
+    );
 
     const fullName = useMemo(() => {
         if (!user) return "Guest User";
@@ -202,10 +215,14 @@ export default function Settings() {
                             <SettingSwitch
                                 icon="notifications-outline"
                                 title="Notifications"
-                                description="Receive important app notifications"
+                                description={
+                                    permissionGranted === false
+                                        ? "Permission denied - enable in system settings"
+                                        : "Receive important app notifications"
+                                }
                                 value={notifications}
-                                onValueChange={
-                                    setNotifications
+                                onValueChange={(v) =>
+                                    handleToggle("general", v)
                                 }
                             />
 
@@ -220,8 +237,8 @@ export default function Settings() {
                                 title="Order Updates"
                                 description="Get updates about your orders"
                                 value={orderUpdates}
-                                onValueChange={
-                                    setOrderUpdates
+                                onValueChange={(v) =>
+                                    handleToggle("orderUpdates", v)
                                 }
                             />
 
@@ -236,7 +253,9 @@ export default function Settings() {
                                 title="Offers & Promotions"
                                 description="Receive deals and special offers"
                                 value={offers}
-                                onValueChange={setOffers}
+                                onValueChange={(v) =>
+                                    handleToggle("offers", v)
+                                }
                             />
                         </View>
 

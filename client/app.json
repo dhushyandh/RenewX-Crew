@@ -36,7 +36,14 @@
       ],
       "@clerk/expo",
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "color": "#111111",
+          "defaultChannel": "renewx-orders"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
