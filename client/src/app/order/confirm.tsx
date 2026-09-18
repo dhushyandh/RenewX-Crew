@@ -647,7 +647,7 @@ export default function OrderConfirmScreen() {
                     <SectionTitle
                         icon="bag-outline"
                         title="Your Items"
-                        subtitle={`${checkoutData.pricing.totalItems} ${
+                        subtitle={`₹{checkoutData.pricing.totalItems} ₹{
                             checkoutData.pricing
                                 .totalItems ===
                             1
@@ -669,7 +669,7 @@ export default function OrderConfirmScreen() {
 
                                 return (
                                     <View
-                                        key={`${item.productId}-${item.size}-${index}`}
+                                        key={`₹{item.productId}-₹{item.size}-₹{index}`}
                                         style={[
                                             styles.itemRow,
                                             index <
@@ -743,7 +743,7 @@ export default function OrderConfirmScreen() {
                                                     styles.itemPrice
                                                 }
                                             >
-                                                $
+                                                ₹
                                                 {(
                                                     item.price *
                                                     item.quantity
@@ -777,7 +777,7 @@ export default function OrderConfirmScreen() {
                     >
                         <SummaryRow
                             label="Subtotal"
-                            value={`$${checkoutData.pricing.subtotal.toFixed(
+                            value={`₹₹{checkoutData.pricing.subtotal.toFixed(
                                 2
                             )}`}
                         />
@@ -790,7 +790,7 @@ export default function OrderConfirmScreen() {
                                     .shipping ===
                                 0
                                     ? "FREE"
-                                    : `$${checkoutData.pricing.shipping.toFixed(
+                                    : `₹₹{checkoutData.pricing.shipping.toFixed(
                                         2
                                     )}`
                             }
@@ -828,7 +828,7 @@ export default function OrderConfirmScreen() {
                                     styles.totalValue
                                 }
                             >
-                                $
+                                ₹
                                 {checkoutData.pricing.total.toFixed(
                                     2
                                 )}
@@ -907,7 +907,7 @@ export default function OrderConfirmScreen() {
                                 styles.bottomTotal
                             }
                         >
-                            $
+                            ₹
                             {checkoutData.pricing.total.toFixed(
                                 2
                             )}
