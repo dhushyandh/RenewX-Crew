@@ -18,7 +18,7 @@ const getBaseUrl = (): string => {
     // 2. Production web builds must use the deployed API, never the browser's
     // own hostname on port 3000.
     if (Platform.OS === 'web' && !__DEV__) {
-        return 'https://api-dhushyandh.onrender.com/api';
+        return 'https://renewx-server.vercel.app/api';
     }
 
     // 3. Mobile device (Android / iOS): extract host IP dynamically from Expo Metro development server
@@ -40,7 +40,7 @@ const getBaseUrl = (): string => {
 
 const api = axios.create({
     baseURL: getBaseUrl(),
-    timeout: 15000,
+    timeout: 30000,
 });
 
 if (__DEV__) {
