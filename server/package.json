@@ -22,7 +22,8 @@
     "mongoose": "^9.10.0",
     "multer": "^2.4.0",
     "helmet": "^8.1.0",
-    "express-rate-limit": "^8.3.1"
+    "express-rate-limit": "^8.3.1",
+    "razorpay": "^3.0.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
