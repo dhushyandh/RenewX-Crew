@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Platform,
+import {
+    Platform,
     ActivityIndicator,
     Dimensions,
     Image,
@@ -247,8 +248,8 @@ export default function ProductDetails() {
                                 <View
                                     key={index}
                                     className={`rounded-full ${index === activeImageIndex
-                                            ? "h-1.5 w-6 bg-black"
-                                            : "h-1.5 w-1.5 bg-white/70"
+                                        ? "h-1.5 w-6 bg-black"
+                                        : "h-1.5 w-1.5 bg-white/70"
                                         }`}
                                 />
                             ))}
@@ -303,14 +304,14 @@ export default function ProductDetails() {
                                         onPress={() => setSelectedSize(size)}
                                         activeOpacity={0.8}
                                         className={`h-11 min-w-[48px] items-center justify-center rounded-xl border px-3 ${selected
-                                                ? "border-black bg-black"
-                                                : "border-gray-100 bg-gray-50"
+                                            ? "border-black bg-black"
+                                            : "border-gray-100 bg-gray-50"
                                             }`}
                                     >
                                         <Text
                                             className={`text-sm font-semibold ${selected
-                                                    ? "text-white"
-                                                    : "text-gray-800"
+                                                ? "text-white"
+                                                : "text-gray-800"
                                                 }`}
                                         >
                                             {size}

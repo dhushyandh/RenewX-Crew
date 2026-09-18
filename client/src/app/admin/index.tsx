@@ -53,8 +53,8 @@ export default function AdminDashboard() {
         lastRequestAt.current = now;
 
         try {
-            const headers = await getAuthHeaders(getTokenRef.current);
-            const { data } = await api.get("/admin/stats", { headers });
+            const authConfig = await getAuthHeaders(getTokenRef.current);
+            const { data } = await api.get("/admin/stats", authConfig);
 
             if (data?.success) {
                 const payload = data.data ?? data;

@@ -7,19 +7,27 @@ import Product from "../models/Products.js";
 
 export const getDashboardStats = async (req: Request, res: Response) => {
     try {
-        const [totalUsers, totalProducts, totalOrder, validOrder, recentOrders, orderSummary] =
+        const [totalUsers, totalProducts, totalOrder, revenueAgg, recentOrders, orderSummary] =
             await Promise.all([
                 User.countDocuments(),
                 Product.countDocuments(),
                 Order.countDocuments(),
-                Order.find({ orderStatus: { $ne: "cancelled" } }).select("totalAmount").lean(),
-                Order.find().sort({ createdAt: -1 }).limit(5).populate("user", "name email").lean(),
+                Order.aggregate([
+                    { $match: { orderStatus: { $ne: "cancelled" } } },
+                    { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+                ]),
+                Order.find()
+                    .sort({ createdAt: -1 })
+                    .limit(5)
+                    .select("orderNumber totalAmount orderStatus paymentStatus createdAt user items")
+                    .populate("user", "name email")
+                    .lean(),
                 Order.aggregate([
                     { $group: { _id: "$orderStatus", count: { $sum: 1 } } }
                 ]),
             ]);
 
-        const totalRevenue = validOrder.reduce((sum, order) => sum + order.totalAmount, 0);
+        const totalRevenue = revenueAgg[0]?.total || 0;
 
         return res.status(200).json({
             success: true,

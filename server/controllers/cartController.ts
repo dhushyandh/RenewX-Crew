@@ -28,7 +28,9 @@ export const addToCart = async (req: Request, res: Response) => {
         const normalizedSize = size.trim();
         const product = await Product.findOne({ _id: productId, isActive: true });
         if (!product) return res.status(404).json({ success: false, message: "Product not found" });
-        if (!product.sizes.includes(normalizedSize)) return res.status(400).json({ success: false, message: "Invalid size" });
+        if (product.sizes && product.sizes.length > 0 && !product.sizes.includes(normalizedSize)) {
+            return res.status(400).json({ success: false, message: `Invalid size: ${normalizedSize}. Available sizes: ${product.sizes.join(', ')}` });
+        }
 
         let cart = await Cart.findOne({ user: req.user.id });
         if (!cart) cart = await Cart.create({ user: req.user.id, items: [] });
@@ -89,7 +91,9 @@ export const updateCartItem = async (req: Request, res: Response) => {
         } else {
             const product = await Product.findOne({ _id: item.product, isActive: true });
             if (!product) return res.status(404).json({ success: false, message: "Product not found" });
-            if (!product.sizes.includes(normalizedSize)) return res.status(400).json({ success: false, message: "Invalid size" });
+            if (product.sizes && product.sizes.length > 0 && !product.sizes.includes(normalizedSize)) {
+                return res.status(400).json({ success: false, message: `Invalid size: ${normalizedSize}. Available sizes: ${product.sizes.join(', ')}` });
+            }
             if (product.stock < quantity) return res.status(400).json({ success: false, message: "Insufficient stock" });
             item.quantity = quantity;
             item.price = product.price;
