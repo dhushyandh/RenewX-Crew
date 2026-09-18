@@ -52,6 +52,12 @@ app.use(cors({
             return callback(null, true);
         }
 
+        // Expo Web can use different local ports depending on the CLI/version.
+        // Allow localhost/127.0.0.1 on any port only in development.
+        if (!isProduction && /^https?:\\/\\/(localhost|127\\.0\\.0\\.1)(:\\d+)?$/.test(origin)) {
+            return callback(null, true);
+        }
+
         return callback(new Error("CORS origin not allowed"));
     },
     credentials: false,
