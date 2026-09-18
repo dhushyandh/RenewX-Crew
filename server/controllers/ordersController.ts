@@ -4,6 +4,11 @@ import Order from "../models/order.js";
 import Cart from "../models/cart.js";
 import Product from "../models/Products.js";
 import { sendOrderPushNotification, sendAdminNewOrderNotification } from "../services/pushNotification.js";
+import {
+    fetchRazorpayOrder,
+    fetchRazorpayPayment,
+    verifyRazorpayPaymentSignature,
+} from "../services/razorpay.js";
 
 // Get user Orders -> GET /api/orders
 export const getOrders = async (req: Request, res: Response) => {
@@ -45,9 +50,9 @@ export const getOrder = async (req: Request, res: Response) => {
         }
 
         if (order.user.toString() !== userId.toString() && userRole !== "admin") {
-            return res.status(401).json({
+            return res.status(403).json({
                 success: false,
-                message: "Not authorized"
+                message: "Forbidden"
             });
         }
 
@@ -80,7 +85,9 @@ export const getOrder = async (req: Request, res: Response) => {
             shippingAddress,
             paymentMethod,
             notes,
-            paymentIntentId,
+            razorpayOrderId,
+            razorpayPaymentId,
+            razorpaySignature,
         } = req.body;
 
         if (!shippingAddress?.street || !shippingAddress?.city ||
@@ -92,18 +99,18 @@ export const getOrder = async (req: Request, res: Response) => {
             });
         }
 
-        if (paymentMethod !== "cash" && paymentMethod !== "stripe") {
+        if (paymentMethod !== "cash" && paymentMethod !== "razorpay") {
             return res.status(400).json({
                 success: false,
                 message: "Invalid payment method",
             });
         }
 
-        // Stripe payment completion is controlled by the server/webhook.
-        if (paymentMethod === "stripe" && !paymentIntentId) {
+        if (paymentMethod === "razorpay" &&
+            (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature)) {
             return res.status(400).json({
                 success: false,
-                message: "Stripe payment intent is required",
+                message: "Online payment verification data is required",
             });
         }
 
@@ -189,6 +196,59 @@ export const getOrder = async (req: Request, res: Response) => {
         const tax = 0;
         const totalAmount = subtotal + shippingCost + tax;
 
+        if (paymentMethod === "razorpay") {
+            const existingOrder = await Order.findOne({ razorpayOrderId });
+            if (existingOrder) {
+                return res.status(200).json({
+                    success: true,
+                    message: "Order already created",
+                    order: existingOrder,
+                });
+            }
+
+            try {
+                const razorpayOrder = await fetchRazorpayOrder(razorpayOrderId);
+                if (Number(razorpayOrder?.amount) !== Math.round(totalAmount * 100) ||
+                    razorpayOrder?.currency !== "INR") {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Payment amount verification failed",
+                    });
+                }
+
+                const validSignature = verifyRazorpayPaymentSignature(
+                    razorpayOrderId,
+                    razorpayPaymentId,
+                    razorpaySignature
+                );
+
+                if (!validSignature) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Payment verification failed",
+                    });
+                }
+
+                const payment = await fetchRazorpayPayment(razorpayPaymentId);
+
+                if (payment?.order_id !== razorpayOrderId ||
+                    Number(payment?.amount) !== Math.round(totalAmount * 100) ||
+                    payment?.currency !== "INR" ||
+                    payment?.status !== "captured") {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Payment has not been captured",
+                    });
+                }
+            } catch (paymentError) {
+                console.error("Razorpay verification error:", paymentError);
+                return res.status(502).json({
+                    success: false,
+                    message: "Unable to verify online payment",
+                });
+            }
+        }
+
         let order: any;
 
         await session.withTransaction(async () => {
@@ -225,16 +285,20 @@ export const getOrder = async (req: Request, res: Response) => {
                     items: orderItems,
                     shippingAddress,
                     paymentMethod,
-                    paymentStatus: "pending",
+                    paymentStatus: paymentMethod === "razorpay" ? "completed" : "pending",
                     orderStatus: "placed",
                     totalAmount,
                     subtotal,
                     tax,
                     shippingCost,
                     notes,
-                    paymentIntentId:
-                        paymentMethod === "stripe"
-                            ? paymentIntentId
+                    razorpayOrderId:
+                        paymentMethod === "razorpay"
+                            ? razorpayOrderId
+                            : undefined,
+                    razorpayPaymentId:
+                        paymentMethod === "razorpay"
+                            ? razorpayPaymentId
                             : undefined,
                     orderNumber,
                 }],
