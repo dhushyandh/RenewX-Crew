@@ -208,6 +208,13 @@ export const createOrder = async (req: Request, res: Response) => {
         if (paymentMethod === "razorpay") {
             const existingOrder = await Order.findOne({ razorpayOrderId });
             if (existingOrder) {
+                if (String(existingOrder.user) !== String(userId)) {
+                    return res.status(409).json({
+                        success: false,
+                        message: "Payment order is already associated with another account",
+                    });
+                }
+
                 return res.status(200).json({
                     success: true,
                     message: "Order already created",
@@ -411,6 +418,14 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
         }
 
         if (paymentStatus) {
+            // Razorpay payment state is gateway-controlled. Admins must not be
+            // able to mark an online payment as completed from the dashboard.
+            if (order.paymentMethod === "razorpay") {
+                return res.status(400).json({
+                    success: false,
+                    message: "Razorpay payment status can only be changed by verified gateway events",
+                });
+            }
             order.paymentStatus = paymentStatus;
         }
 
