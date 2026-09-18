@@ -152,7 +152,9 @@ export const createProduct = async (req: Request, res: Response) => {
 
         if (req.files && (req.files as any).length > 0) {
             try {
-                images = await Promise.all(\n                    (req.files as any).map((file: any) => uploadImageToBlob(file))\n                );
+                images = await Promise.all(
+                    (req.files as any).map((file: any) => uploadImageToBlob(file))
+                );
             } catch (error: any) {
                 console.error("Vercel Blob upload failed during product creation:", { message: error?.message, status: error?.status, code: error?.code });
                 return res.status(error?.code === "BLOB_TIMEOUT" ? 504 : 503).json({
