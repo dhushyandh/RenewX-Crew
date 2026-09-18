@@ -4,6 +4,7 @@ import api, { getAuthHeaders } from "@/constants/api";
 
 import {
     createContext,
+    useCallback,
     useContext,
     useEffect,
     useState,
@@ -76,7 +77,7 @@ export function CartProvider({
     const { registerRefreshHandler } =
         useAppRefresh();
 
-    const fetchCart = async () => {
+    const fetchCart = useCallback(async () => {
         if (!isSignedIn) {
             setCartItems([]);
             setCartTotal(0);
@@ -117,7 +118,7 @@ export function CartProvider({
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [isSignedIn, getToken]);
 
     /*
      * Register cart refresh globally.
@@ -126,14 +127,14 @@ export function CartProvider({
         return registerRefreshHandler(
             fetchCart,
         );
-    }, [registerRefreshHandler]);
+    }, [registerRefreshHandler, fetchCart]);
 
     /*
      * Initial cart load.
      */
     useEffect(() => {
-        fetchCart();
-    }, []);
+        void fetchCart();
+    }, [fetchCart]);
 
     const addToCart = async (
         product: Product,
