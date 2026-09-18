@@ -73,60 +73,83 @@ export const getProduct = async (req: Request, res: Response) => {
         })
     }
 }
-// Create product -> POST /api/v1/product
+// Upload one image to Cloudinary. Never fall back to base64 data URLs:
+// MongoDB documents should contain stable Cloudinary URLs, not multi-megabyte image blobs.
+const uploadImageToCloudinary = (file: any): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        let settled = false;
+
+        const finish = (error?: any, url?: string) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+
+            if (error) {
+                reject(error);
+                return;
+            }
+
+            if (!url) {
+                reject(new Error("Cloudinary upload completed without a secure URL"));
+                return;
+            }
+
+            resolve(url);
+        };
+
+        // Give Cloudinary enough time for normal network conditions while still
+        // preventing a request from hanging indefinitely.
+        const timer = setTimeout(() => {
+            const timeoutError = new Error("Cloudinary upload timed out after 30 seconds");
+            (timeoutError as any).code = "CLOUDINARY_TIMEOUT";
+            finish(timeoutError);
+        }, 30000);
+
+        try {
+            const uploadStream = cloudinary.uploader.upload_stream(
+                {
+                    folder: "ecommerce/products",
+                    resource_type: "image",
+                },
+                (error: any, result: any) => {
+                    if (error) {
+                        finish(error);
+                        return;
+                    }
+
+                    finish(undefined, result?.secure_url);
+                }
+            );
+
+            uploadStream.on("error", (error: any) => finish(error));
+            uploadStream.end(file.buffer);
+        } catch (error) {
+            finish(error);
+        }
+    });
+};
+
+const formatCloudinaryError = (error: any) => ({
+    message: error?.message || "Cloudinary upload failed",
+    http_code: error?.http_code,
+    name: error?.name,
+});
+
+// Create product -> POST /api/products
 export const createProduct = async (req: Request, res: Response) => {
     try {
         let images: string[] = [];
 
-        // Handle file uploads with Cloudinary and fast timeout fallback
         if (req.files && (req.files as any).length > 0) {
             try {
-                const uploadPromises = (req.files as any).map((file: any) => {
-                    return new Promise<string>((resolve) => {
-                        let isDone = false;
-                        const fallback = () => {
-                            if (!isDone) {
-                                isDone = true;
-                                const base64 = file.buffer.toString('base64');
-                                const mime = file.mimetype || 'image/jpeg';
-                                resolve(`data:${mime};base64,${base64}`);
-                            }
-                        };
-
-                        const timer = setTimeout(() => {
-                            console.log("Cloudinary upload timed out, using direct image buffer");
-                            fallback();
-                        }, 5000);
-
-                        try {
-                            const uploadStream = cloudinary.uploader.upload_stream(
-                                { folder: 'ecommerce/products' },
-                                (error: any, result: any) => {
-                                    clearTimeout(timer);
-                                    if (isDone) return;
-                                    isDone = true;
-                                    if (error || !result?.secure_url) {
-                                        console.error("Cloudinary upload error, using buffer:", error);
-                                        fallback();
-                                    } else {
-                                        resolve(result.secure_url);
-                                    }
-                                }
-                            );
-                            uploadStream.end(file.buffer);
-                        } catch (streamErr) {
-                            clearTimeout(timer);
-                            fallback();
-                        }
-                    });
-                });
-                images = await Promise.all(uploadPromises);
-            } catch (cloudErr: any) {
-                console.error("Cloudinary upload failed, using uploaded file buffer directly:", cloudErr.message);
-                images = (req.files as any).map((file: any) => {
-                    const base64 = file.buffer.toString('base64');
-                    const mime = file.mimetype || 'image/jpeg';
-                    return `data:${mime};base64,${base64}`;
+                images = await Promise.all(
+                    (req.files as any).map((file: any) => uploadImageToCloudinary(file))
+                );
+            } catch (error: any) {
+                console.error("Cloudinary upload failed during product creation:", formatCloudinaryError(error));
+                return res.status(error?.code === "CLOUDINARY_TIMEOUT" ? 504 : 503).json({
+                    success: false,
+                    message: "Image storage is temporarily unavailable. Please try again.",
                 });
             }
         }
@@ -134,47 +157,44 @@ export const createProduct = async (req: Request, res: Response) => {
         if (images.length === 0 && req.body.images) {
             if (Array.isArray(req.body.images)) {
                 images = req.body.images;
-            } else if (typeof req.body.images === 'string') {
+            } else if (typeof req.body.images === "string") {
                 images = [req.body.images];
             }
         }
 
         let sizes = req.body.sizes || [];
-        if (typeof sizes === 'string') {
-            sizes = sizes.split(',').map((s: string) => s.trim()).filter((s: string) => s !== '');
+        if (typeof sizes === "string") {
+            sizes = sizes.split(",").map((s: string) => s.trim()).filter((s: string) => s !== "");
         }
         if (!Array.isArray(sizes)) sizes = [sizes];
 
-        const validCategories = ['Men', 'Women', 'Kids', 'Shoes', 'Bags', 'Bag', 'Other'];
-        let category = req.body.category || 'Other';
+        const validCategories = ["Men", "Women", "Kids", "Shoes", "Bags", "Bag", "Other"];
+        let category = req.body.category || "Other";
         const matchedCat = validCategories.find(c => c.toLowerCase() === String(category).toLowerCase());
-        category = matchedCat || 'Other';
+        category = matchedCat || "Other";
 
         const productData = {
             ...req.body,
             category,
             price: Number(req.body.price),
             stock: Number(req.body.stock || 0),
-            isFeatured: req.body.isFeatured === 'true' || req.body.isFeatured === true,
-            images: images,
-            sizes
+            isFeatured: req.body.isFeatured === "true" || req.body.isFeatured === true,
+            images,
+            sizes,
         };
 
         const product = await Product.create(productData);
-        return res.status(201).json({
-            success: true,
-            data: product
-        });
+        return res.status(201).json({ success: true, data: product });
     } catch (error: any) {
         console.error("Error creating product in ProductController:", error);
         return res.status(500).json({
             success: false,
-            message: error.message || "Failed to create product"
+            message: error.message || "Failed to create product",
         });
     }
 };
 
-// Update product -> PUT /api/v1/product/:id
+// Update product -> PUT /api/products/:id
 export const updateProduct = async (req: Request, res: Response) => {
     try {
         let images: string[] = [];
@@ -187,58 +207,18 @@ export const updateProduct = async (req: Request, res: Response) => {
             }
         }
 
-        // Handle file uploads
         if (req.files && (req.files as any).length > 0) {
             try {
-                const uploadPromises = (req.files as any).map((file: any) => {
-                    return new Promise<string>((resolve) => {
-                        let isDone = false;
-                        const fallback = () => {
-                            if (!isDone) {
-                                isDone = true;
-                                const base64 = file.buffer.toString('base64');
-                                const mime = file.mimetype || 'image/jpeg';
-                                resolve(`data:${mime};base64,${base64}`);
-                            }
-                        };
-
-                        const timer = setTimeout(() => {
-                            console.log("Cloudinary update upload timed out, using direct image buffer");
-                            fallback();
-                        }, 5000);
-
-                        try {
-                            const uploadStream = cloudinary.uploader.upload_stream(
-                                { folder: 'ecommerce/products' },
-                                (error: any, result: any) => {
-                                    clearTimeout(timer);
-                                    if (isDone) return;
-                                    isDone = true;
-                                    if (error || !result?.secure_url) {
-                                        console.error("Cloudinary upload error in update, using direct buffer:", error);
-                                        fallback();
-                                    } else {
-                                        resolve(result.secure_url);
-                                    }
-                                }
-                            );
-                            uploadStream.end(file.buffer);
-                        } catch (streamErr) {
-                            clearTimeout(timer);
-                            fallback();
-                        }
-                    });
-                });
-                const newImages = await Promise.all(uploadPromises);
+                const newImages = await Promise.all(
+                    (req.files as any).map((file: any) => uploadImageToCloudinary(file))
+                );
                 images = [...images, ...newImages];
-            } catch (cloudErr: any) {
-                console.error("Cloudinary upload error in updateProduct:", cloudErr.message);
-                const newImages = (req.files as any).map((file: any) => {
-                    const base64 = file.buffer.toString('base64');
-                    const mime = file.mimetype || 'image/jpeg';
-                    return `data:${mime};base64,${base64}`;
+            } catch (error: any) {
+                console.error("Cloudinary upload failed during product update:", formatCloudinaryError(error));
+                return res.status(error?.code === "CLOUDINARY_TIMEOUT" ? 504 : 503).json({
+                    success: false,
+                    message: "Image storage is temporarily unavailable. The product was not changed. Please try again.",
                 });
-                images = [...images, ...newImages];
             }
         }
 
@@ -246,52 +226,52 @@ export const updateProduct = async (req: Request, res: Response) => {
 
         if (req.body.price !== undefined) updates.price = Number(req.body.price);
         if (req.body.stock !== undefined) updates.stock = Number(req.body.stock);
-        if (req.body.isFeatured !== undefined) updates.isFeatured = req.body.isFeatured === 'true' || req.body.isFeatured === true;
+        if (req.body.isFeatured !== undefined) {
+            updates.isFeatured = req.body.isFeatured === "true" || req.body.isFeatured === true;
+        }
 
         if (req.body.category) {
-            const validCategories = ['Men', 'Women', 'Kids', 'Shoes', 'Bags', 'Bag', 'Other'];
+            const validCategories = ["Men", "Women", "Kids", "Shoes", "Bags", "Bag", "Other"];
             const matchedCat = validCategories.find(c => c.toLowerCase() === String(req.body.category).toLowerCase());
-            updates.category = matchedCat || 'Other';
+            updates.category = matchedCat || "Other";
         }
 
         let sizes = req.body.sizes || req.body.size;
         if (sizes) {
-            if (typeof sizes === 'string') {
+            if (typeof sizes === "string") {
                 try {
                     sizes = JSON.parse(sizes);
-                } catch (error: any) {
-                    sizes = sizes.split(',').map((s: string) => s.trim()).filter((s: string) => s !== "");
+                } catch {
+                    sizes = sizes.split(",").map((s: string) => s.trim()).filter((s: string) => s !== "");
                 }
             }
-            if (!Array.isArray(sizes)) {
-                sizes = [sizes];
-            }
+            if (!Array.isArray(sizes)) sizes = [sizes];
             updates.sizes = sizes;
         }
 
         if (images.length > 0 || req.body.existingImages !== undefined) {
             updates.images = images;
         }
+
         delete updates.existingImages;
         delete updates.size;
 
-        const product = await Product.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
+        const product = await Product.findByIdAndUpdate(
+            req.params.id,
+            updates,
+            { new: true, runValidators: true }
+        );
 
         if (!product) {
-            return res.status(404).json({
-                success: false,
-                message: 'product not found'
-            });
+            return res.status(404).json({ success: false, message: "product not found" });
         }
-        return res.status(200).json({
-            success: true,
-            data: product
-        });
+
+        return res.status(200).json({ success: true, data: product });
     } catch (error: any) {
         console.error("Error updating product in ProductController:", error);
         return res.status(500).json({
             success: false,
-            message: error.message || "Failed to update product"
+            message: error.message || "Failed to update product",
         });
     }
 };
