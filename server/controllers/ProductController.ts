@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import Product from "../models/Products.js";
-import cloudinary from "../config/cloudinary.js";
+import axios from "axios";
 
 // Get all products -> Get /api/products?page=1&limit=10
 export const getProducts = async (req: Request, res: Response) => {
@@ -73,67 +73,77 @@ export const getProduct = async (req: Request, res: Response) => {
         })
     }
 }
-// Upload one image to Cloudinary. Never fall back to base64 data URLs:
-// MongoDB documents should contain stable Cloudinary URLs, not multi-megabyte image blobs.
-const uploadImageToCloudinary = (file: any): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        let settled = false;
+const VERCEL_BLOB_API = "https://blob.vercel-storage.com";
+const VERCEL_BLOB_API_VERSION = "7";
 
-        const finish = (error?: any, url?: string) => {
-            if (settled) return;
-            settled = true;
-            clearTimeout(timer);
-
-            if (error) {
-                reject(error);
-                return;
-            }
-
-            if (!url) {
-                reject(new Error("Cloudinary upload completed without a secure URL"));
-                return;
-            }
-
-            resolve(url);
-        };
-
-        // Give Cloudinary enough time for normal network conditions while still
-        // preventing a request from hanging indefinitely.
-        const timer = setTimeout(() => {
-            const timeoutError = new Error("Cloudinary upload timed out after 30 seconds");
-            (timeoutError as any).code = "CLOUDINARY_TIMEOUT";
-            finish(timeoutError);
-        }, 30000);
-
-        try {
-            const uploadStream = cloudinary.uploader.upload_stream(
-                {
-                    folder: "ecommerce/products",
-                    resource_type: "image",
-                },
-                (error: any, result: any) => {
-                    if (error) {
-                        finish(error);
-                        return;
-                    }
-
-                    finish(undefined, result?.secure_url);
-                }
-            );
-
-            uploadStream.on("error", (error: any) => finish(error));
-            uploadStream.end(file.buffer);
-        } catch (error) {
-            finish(error);
-        }
-    });
+const getBlobToken = () => {
+    const token = process.env.BLOB_READ_WRITE_TOKEN;
+    if (!token) {
+        const error: any = new Error("BLOB_READ_WRITE_TOKEN is not configured");
+        error.code = "BLOB_NOT_CONFIGURED";
+        throw error;
+    }
+    return token;
 };
 
-const formatCloudinaryError = (error: any) => ({
-    message: error?.message || "Cloudinary upload failed",
-    http_code: error?.http_code,
-    name: error?.name,
-});
+const sanitizeFileName = (name: string) =>
+    name.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/-+/g, "-").slice(0, 80) || "image";
+
+// Store product images in Vercel Blob. MongoDB stores only the returned URL.
+const uploadImageToBlob = async (file: any): Promise<string> => {
+    const token = getBlobToken();
+    const fileName = sanitizeFileName(file.originalname || "image");
+    const pathname = "products/" + Date.now() + "-" + Math.random().toString(36).slice(2, 10) + "-" + fileName;
+
+    try {
+        const response = await axios.put(VERCEL_BLOB_API + "/" + pathname, file.buffer, {
+            timeout: 30000,
+            maxBodyLength: Infinity,
+            headers: {
+                authorization: "Bearer " + token,
+                "x-api-version": VERCEL_BLOB_API_VERSION,
+                "x-content-type": file.mimetype || "application/octet-stream",
+                access: "public",
+                "x-add-random-suffix": "0",
+                "x-cache-control-max-age": "31536000",
+            },
+        });
+
+        const url = response.data?.url;
+        if (!url || typeof url !== "string") {
+            const error: any = new Error("Vercel Blob upload completed without a URL");
+            error.code = "BLOB_INVALID_RESPONSE";
+            throw error;
+        }
+        return url;
+    } catch (error: any) {
+        const normalized: any = new Error(
+            error?.response?.data?.error?.message ||
+            error?.response?.data?.message ||
+            error?.message ||
+            "Vercel Blob upload failed"
+        );
+        normalized.code = error?.code === "ECONNABORTED" ? "BLOB_TIMEOUT" : error?.code;
+        normalized.status = error?.response?.status;
+        throw normalized;
+    }
+};
+
+const deleteBlobByUrl = async (url: string) => {
+    if (!url || !url.includes(".blob.vercel-storage.com/")) return;
+    try {
+        await axios.post(VERCEL_BLOB_API + "/delete", { urls: [url] }, {
+            timeout: 10000,
+            headers: {
+                authorization: "Bearer " + getBlobToken(),
+                "x-api-version": VERCEL_BLOB_API_VERSION,
+                "content-type": "application/json",
+            },
+        });
+    } catch (error: any) {
+        console.warn("Vercel Blob delete failed:", error?.response?.data || error?.message);
+    }
+};
 
 // Create product -> POST /api/products
 export const createProduct = async (req: Request, res: Response) => {
@@ -142,12 +152,10 @@ export const createProduct = async (req: Request, res: Response) => {
 
         if (req.files && (req.files as any).length > 0) {
             try {
-                images = await Promise.all(
-                    (req.files as any).map((file: any) => uploadImageToCloudinary(file))
-                );
+                images = await Promise.all(\n                    (req.files as any).map((file: any) => uploadImageToBlob(file))\n                );
             } catch (error: any) {
-                console.error("Cloudinary upload failed during product creation:", formatCloudinaryError(error));
-                return res.status(error?.code === "CLOUDINARY_TIMEOUT" ? 504 : 503).json({
+                console.error("Vercel Blob upload failed during product creation:", { message: error?.message, status: error?.status, code: error?.code });
+                return res.status(error?.code === "BLOB_TIMEOUT" ? 504 : 503).json({
                     success: false,
                     message: "Image storage is temporarily unavailable. Please try again.",
                 });
@@ -209,13 +217,11 @@ export const updateProduct = async (req: Request, res: Response) => {
 
         if (req.files && (req.files as any).length > 0) {
             try {
-                const newImages = await Promise.all(
-                    (req.files as any).map((file: any) => uploadImageToCloudinary(file))
-                );
+                const newImages = await Promise.all(\n                    (req.files as any).map((file: any) => uploadImageToBlob(file))\n                );
                 images = [...images, ...newImages];
             } catch (error: any) {
-                console.error("Cloudinary upload failed during product update:", formatCloudinaryError(error));
-                return res.status(error?.code === "CLOUDINARY_TIMEOUT" ? 504 : 503).json({
+                console.error("Vercel Blob upload failed during product update:", { message: error?.message, status: error?.status, code: error?.code });
+                return res.status(error?.code === "BLOB_TIMEOUT" ? 504 : 503).json({
                     success: false,
                     message: "Image storage is temporarily unavailable. The product was not changed. Please try again.",
                 });
@@ -287,17 +293,10 @@ export const deleteProduct = async (req: Request, res: Response) => {
                 message: 'product not found'
             });
         }
-        // Delete images from cloudinary
+        // Delete Vercel Blob images. Legacy Cloudinary URLs are left untouched
+        // so existing products remain usable during migration.
         if (product.images && product.images.length > 0) {
-            const deletePromises = product.images.map((imageUrl) => {
-                const publicIdMatch = imageUrl.match(/\/v\d+\/([^/]+)\.\w+$/);
-                const publicId = publicIdMatch ? publicIdMatch[1] : null;
-                if (publicId) {
-                    return cloudinary.uploader.destroy(publicId).catch(() => {});
-                }
-                return Promise.resolve();
-            });
-            await Promise.all(deletePromises);
+            await Promise.all(product.images.map((imageUrl) => deleteBlobByUrl(imageUrl)));
         }
         await Product.findByIdAndDelete(req.params.id);
         return res.status(200).json({
