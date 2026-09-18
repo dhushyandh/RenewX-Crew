@@ -42,6 +42,7 @@ export const sendPushNotifications = async (
                 "Accept-Encoding": "gzip, deflate",
                 "Content-Type": "application/json",
             },
+            timeout: 10000,
         });
 
         const data = response.data?.data;
@@ -57,7 +58,7 @@ export const sendPushNotifications = async (
                             { token: failedToken },
                             { enabled: false }
                         );
-                        console.log(`[Push Notification] Device not registered on Expo for token: ${failedToken} (deactivated)`);
+                        console.log("[Push Notification] Device not registered on Expo; token deactivated.");
                     } else {
                         console.warn(`[Push Notification] Expo ticket error for ticket ${i}: ${ticket.message || "Unknown error"}`);
                     }
