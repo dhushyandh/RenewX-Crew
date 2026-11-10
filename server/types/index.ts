@@ -69,12 +69,9 @@ export interface IProduct extends Document {
     comparePrice?: number;
     images: string[];
     sizes: string[];
-    category: "Men" | "Women" | "Kids" | "Shoes" | "Bags" | "Other";
+    category: "Phones" | "Laptops" | "Tablets" | "Audio" | "Wearables" | "Accessories" | "Gaming" | "Monitors" | "Other" | "Men" | "Women" | "Kids" | "Shoes" | "Bags" | "Bag";
     stock: number;
-    ratings: {
-        average: number;
-        count: number;
-    };
+    ratings: { average: number; count: number };
     isFeatured: boolean;
     isActive: boolean;
     createdAt: Date;
