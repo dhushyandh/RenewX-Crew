@@ -62,7 +62,9 @@ export const refresh = async (req: Request, res: Response) => {
         if (payload.typ !== "refresh" || typeof payload.sub !== "string") throw new Error("Invalid refresh token");
         const user = await User.findOne({ _id: payload.sub, isActive: true });
         if (!user || (user.tokenVersion || 0) !== payload.ver) throw new Error("Session revoked");
-        return res.status(200).json({ success: true, data: issueSession(res, user) });
+        user.tokenVersion = (user.tokenVersion || 0) + 1;
+        await user.save();
+        return res.status(200).json({ success: true, data: issueSession(res, user, req.headers["x-client-platform"] === "native") });
     } catch {
         res.clearCookie(COOKIE_NAME, cookieOptions);
         res.clearCookie(ACCESS_COOKIE, { ...cookieOptions, path: "/api" });
