@@ -124,7 +124,7 @@ export const createProduct = async (req: Request, res: Response) => {
         }
         if (!Array.isArray(sizes)) sizes = [sizes];
 
-        const validCategories = ['Men', 'Women', 'Kids', 'Shoes', 'Bags', 'Bag', 'Other'];
+        const validCategories = ["Phones", "Laptops", "Tablets", "Audio", "Wearables", "Accessories", "Gaming", "Monitors", "Other", "Men", "Women", "Kids", "Shoes", "Bags", "Bag"];
         let category = req.body.category || 'Other';
         const matchedCat = validCategories.find(c => c.toLowerCase() === String(category).toLowerCase());
         category = matchedCat || 'Other';
@@ -213,7 +213,7 @@ export const updateProduct = async (req: Request, res: Response) => {
         if (req.body.isFeatured !== undefined) updates.isFeatured = req.body.isFeatured === 'true' || req.body.isFeatured === true;
 
         if (req.body.category) {
-            const validCategories = ['Men', 'Women', 'Kids', 'Shoes', 'Bags', 'Bag', 'Other'];
+            const validCategories = ["Phones", "Laptops", "Tablets", "Audio", "Wearables", "Accessories", "Gaming", "Monitors", "Other", "Men", "Women", "Kids", "Shoes", "Bags", "Bag"];
             const matchedCat = validCategories.find(c => c.toLowerCase() === String(req.body.category).toLowerCase());
             updates.category = matchedCat || 'Other';
         }
