@@ -12,7 +12,7 @@ export const protect = async (req: Request, res: Response, next: NextFunction) =
     try {
         const header = req.headers.authorization;
         const bearer = header?.startsWith("Bearer ") ? header.slice(7).trim() : undefined;
-        const token = bearer || req.cookies?.renewx_access;
+        const token = bearer;
         if (!token) return res.status(401).json({ success: false, message: "Authentication required." });
         const payload = jwt.verify(token, accessSecret()) as jwt.JwtPayload;
         if (payload.typ !== "access" || typeof payload.sub !== "string") return res.status(401).json({ success: false, message: "Invalid access token." });
