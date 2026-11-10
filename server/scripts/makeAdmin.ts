@@ -10,8 +10,7 @@ const makeAdmin = async () => {
         if (!email) throw new Error("ADMIN_EMAIL environment variable is not set");
         const user = await User.findOne({ email });
         if (!user) throw new Error(`User with email ${email} not found. Register this account first.`);
-        user.role = "admin";
-        await user.save();
+        await User.updateOne({ _id: user._id }, { $set: { role: "admin" } });
         console.log(`User ${email} is now an admin.`);
     } catch (error) {
         console.error("Error making user admin:", error);
