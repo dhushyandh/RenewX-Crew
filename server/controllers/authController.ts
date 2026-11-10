@@ -4,7 +4,6 @@ import jwt from "jsonwebtoken";
 import User from "../models/user.js";
 
 const COOKIE_NAME = "renewx_refresh";
-const ACCESS_COOKIE = "renewx_access";
 const production = process.env.NODE_ENV === "production";
 const cookieOptions = { httpOnly: true, secure: production, sameSite: (production ? "none" : "lax") as "none" | "lax", path: "/api/auth" };
 const secret = (name: "JWT_ACCESS_SECRET" | "JWT_REFRESH_SECRET") => {
@@ -17,7 +16,6 @@ const issueSession = (res: Response, user: any, includeRefreshToken = false) => 
     const accessToken = jwt.sign({ sub: user._id.toString(), typ: "access" }, secret("JWT_ACCESS_SECRET"), { expiresIn: "15m" });
     const refreshToken = jwt.sign({ sub: user._id.toString(), ver: user.tokenVersion || 0, typ: "refresh" }, secret("JWT_REFRESH_SECRET"), { expiresIn: "30d" });
     res.cookie(COOKIE_NAME, refreshToken, { ...cookieOptions, maxAge: 30 * 86400000 });
-    res.cookie(ACCESS_COOKIE, accessToken, { ...cookieOptions, path: "/api", maxAge: 15 * 60 * 1000 });
     return { accessToken, ...(includeRefreshToken ? { refreshToken } : {}), tokenType: "Bearer", expiresIn: 900, user: publicUser(user) };
 };
 
@@ -67,7 +65,6 @@ export const refresh = async (req: Request, res: Response) => {
         return res.status(200).json({ success: true, data: issueSession(res, user, req.headers["x-client-platform"] === "native") });
     } catch {
         res.clearCookie(COOKIE_NAME, cookieOptions);
-        res.clearCookie(ACCESS_COOKIE, { ...cookieOptions, path: "/api" });
         return res.status(401).json({ success: false, message: "Your session has expired. Please sign in again." });
     }
 };
