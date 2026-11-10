@@ -1,11 +1,11 @@
 import "dotenv/config";
-import express, { Request, Response, NextFunction } from 'express';
+import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import helmet from "helmet";
+import cookieParser from "cookie-parser";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import connectDB from "./config/db.js";
-import { clerkMiddleware, getAuth } from '@clerk/express'
-import { clerkWebhook } from "./controllers/webhooks.js";
+import authRoutes from "./routes/authRoutes.js";
 import productRoutes from "./routes/productsRoutes.js";
 import CartRoutes from "./routes/cartRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
@@ -18,146 +18,70 @@ import sellRequestRoutes from "./routes/sellRequestRoutes.js";
 import { razorpayWebhook } from "./controllers/paymentWebhook.js";
 
 const app = express();
-
-// Fail fast during startup if the database is unavailable. This prevents the
-// API from accepting requests while MongoDB is disconnected.
 await connectDB();
-
-// Render/reverse proxies must be trusted so rate limiting sees the real
-// client address instead of treating every request as one proxy IP.
 app.set("trust proxy", 1);
-
-// Webhooks must receive the untouched request body for signature verification.
-app.post('/api/clerk', express.raw({ type: 'application/json' }), clerkWebhook);
-app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), razorpayWebhook);
-
-// Security middleware
 app.disable("x-powered-by");
 app.use(helmet());
 
 const configuredOrigins = (process.env.CORS_ORIGINS || "")
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean);
-
+    .split(",").map(origin => origin.trim()).filter(Boolean);
 const isProduction = process.env.NODE_ENV === "production";
-const allowedOrigins = isProduction
-    ? configuredOrigins
-    : [
-        ...configuredOrigins,
-        "http://localhost:8081",
-        "http://127.0.0.1:8081",
-        "http://localhost:19006",
-        "http://127.0.0.1:19006",
-    ];
-
 app.use(cors({
     origin: (origin, callback) => {
-        // Native mobile apps normally do not send an Origin header.
-        if (!origin) {
-            return callback(null, true);
-        }
-
-        if (
-            allowedOrigins.length === 0 ||
-            allowedOrigins.includes(origin) ||
-            allowedOrigins.includes('*') ||
-            origin.startsWith('http://localhost') ||
-            origin.startsWith('http://127.0.0.1') ||
-            origin.startsWith('http://192.168.')
-        ) {
-            return callback(null, true);
-        }
-
-        // Expo Web can use different local ports depending on the CLI/version.
-        // Allow localhost/127.0.0.1 on any port only in development.
+        if (!origin) return callback(null, true);
+        if (configuredOrigins.includes(origin)) return callback(null, true);
         if (!isProduction) {
             try {
-                const requestOrigin = new URL(origin);
-                const isLocalhost =
-                    requestOrigin.protocol === "http:" &&
-                    (requestOrigin.hostname === "localhost" ||
-                        requestOrigin.hostname === "127.0.0.1");
-
-                if (isLocalhost) {
-                    return callback(null, true);
-                }
-            } catch {
-                // Fall through to the CORS rejection below.
-            }
+                const parsed = new URL(origin);
+                if (parsed.protocol === "http:" && ["localhost", "127.0.0.1"].includes(parsed.hostname)) return callback(null, true);
+            } catch { /* reject malformed origins */ }
         }
-
         return callback(new Error("CORS origin not allowed"));
     },
-    credentials: false,
+    credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "Idempotency-Key"],
 }));
 
-// Limit JSON payloads to reduce accidental/malicious memory usage.
 app.use(express.json({ limit: "1mb" }));
-
-// Clerk is initialized before rate limiting so authenticated requests can be
-// bucketed per Clerk user. This avoids one shared NAT/proxy IP exhausting the
-// limit for every user of the application.
-app.use(clerkMiddleware());
-
-const rateLimitKey = (req: Request) => {
-    const userId = getAuth(req)?.userId;
-
-    if (userId) {
-        return `user:${userId}`;
-    }
-
-    return `ip:${ipKeyGenerator(req.ip || "unknown")}`;
-};
+app.use(cookieParser());
+app.post("/api/payments/webhook", express.raw({ type: "application/json" }), razorpayWebhook);
 
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 1000,
     standardHeaders: "draft-8",
     legacyHeaders: false,
-    keyGenerator: rateLimitKey,
-    skip: (req) => req.path === "/health",
-    message: {
-        success: false,
-        message: "Too many requests. Please try again later.",
+    keyGenerator: (req: Request) => {
+        const authorization = req.headers.authorization;
+        const tokenHint = authorization?.startsWith("Bearer ") ? authorization.slice(7, 31) : undefined;
+        return tokenHint ? `token:${tokenHint}` : `ip:${ipKeyGenerator(req.ip || "unknown")}`;
     },
+    skip: req => req.path === "/health",
+    message: { success: false, message: "Too many requests. Please try again later." },
 });
-
 app.use("/api", apiLimiter);
 
-app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-    if (err instanceof SyntaxError && "status" in err && (err as any).status === 400 && "body" in err) {
-        return res.status(400).json({
-            success: false,
-            message: "Malformed JSON payload in request body",
-        });
+app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+    if (err instanceof SyntaxError && "status" in err && err.status === 400 && "body" in err) {
+        return res.status(400).json({ success: false, message: "Malformed JSON payload in request body" });
     }
-    next(err);
+    return next(err);
 });
 
-app.get("/health", (req: Request, res: Response) => {
-    return res.status(200).json({ success: true, status: "ok" });
-});
+app.get("/health", (_req: Request, res: Response) => res.status(200).json({ success: true, status: "ok" }));
+app.get("/", (_req: Request, res: Response) => res.send("Server is Live!"));
+
+app.use("/api/auth", authRoutes);
+app.use("/api/products", productRoutes);
+app.use("/api/cart", CartRoutes);
+app.use("/api/orders", orderRoutes);
+app.use("/api/addresses", AddressRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/payments", paymentRoutes);
+app.use("/api/wishlist", wishlistRoutes);
+app.use("/api/sell-requests", sellRequestRoutes);
+app.use("/api/admin", AdminRoutes);
 
 const port = Number(process.env.PORT || 3000);
-
-app.get('/', (req: Request, res: Response) => {
-    res.send('Server is Live!');
-});
-
-app.use('/api/products', productRoutes);
-app.use('/api/cart', CartRoutes);
-app.use('/api/orders', orderRoutes);
-app.use('/api/addresses', AddressRoutes);
-app.use('/api/notifications', notificationRoutes);
-app.use('/api/payments', paymentRoutes);
-app.use('/api/wishlist', wishlistRoutes);
-app.use('/api/sell-requests', sellRequestRoutes);
-app.use('/api/admin', AdminRoutes);
-
-
-app.listen(port, () => {
-    console.log(`Server is running at http://localhost:${port}`);
-});
+app.listen(port, () => console.log(`Server is running at http://localhost:${port}`));
