@@ -13,6 +13,8 @@ import AddressRoutes from "./routes/addressRoutes.js";
 import AdminRoutes from "./routes/adminRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
+import wishlistRoutes from "./routes/wishlistRoutes.js";
+import sellRequestRoutes from "./routes/sellRequestRoutes.js";
 import { razorpayWebhook } from "./controllers/paymentWebhook.js";
 
 const app = express();
@@ -151,6 +153,8 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/addresses', AddressRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/wishlist', wishlistRoutes);
+app.use('/api/sell-requests', sellRequestRoutes);
 app.use('/api/admin', AdminRoutes);
 
 
